@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.venv/
+venv/
+.env
+
+# Models & heavy assets (never commit)
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+models/
+outputs/
+input/
+
+# Rclone & credentials
+rclone.conf
+*.key
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
