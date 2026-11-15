@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FP AI Video Factory — Painel Administrativo</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --panel: #131822;
+      --panel-2: #1a2130;
+      --border: #263043;
+      --text: #e6edf7;
+      --muted: #8b9bb4;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .badge.ok { color: var(--ok); border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.1); }
+    .badge.running { color: var(--warn); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.1); }
+    .badge.error { color: var(--err); border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); }
+
+    main {
+      max-width: 1380px;
+      margin: 24px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 20px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      margin-top: 12px;
+    }
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 76px; }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .row { display: flex; gap: 12px; align-items: center; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: 0.15s ease;
+    }
+    button:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      font-size: 13px;
+    }
+    .checkbox-row input { width: auto; }
+
+    pre.logs {
+      background: #070a0f;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      height: 240px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    video {
+      width: 100%;
+      max-height: 420px;
+      border-radius: 10px;
+      background: #000;
+      border: 1px solid var(--border);
+    }
+    .video-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .video-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .video-item small { color: var(--muted); }
+    .preset-box {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .preset-box code {
+      display: block;
+      color: #93c5fd;
+      word-break: break-all;
+      margin: 6px 0;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎬 FP AI Video Factory — Painel Administrativo</h1>
+    <span id="job-badge" class="badge">Aguardando</span>
+  </header>
+
+  <main>
+    <!-- Coluna Esquerda -->
+    <section>
+      <div class="card">
+        <h2>
+          1. Conexão Vast.ai (ComfyUI)
+          <span id="conn-badge" class="badge">Não testado</span>
+        </h2>
+        <label for="server-url">URL do Endpoint ComfyUI (porta 8188)</label>
+        <div class="row">
+          <input id="server-url" type="text" value="http://127.0.0.1:8188" placeholder="http://IP-DA-VAST:8188" />
+          <button type="button" onclick="testConnection()">Testar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. Prompt e Parâmetros do Vídeo</h2>
+        <label for="workflow-select">Workflow</label>
+        <select id="workflow-select" onchange="loadWorkflowDefaults()"></select>
+
+        <label for="positive-prompt">Prompt Positivo (Cena)</label>
+        <textarea id="positive-prompt" placeholder="Descreva a cena hiper-realista..."></textarea>
+
+        <label for="negative-prompt">Prompt Negativo</label>
+        <textarea id="negative-prompt" style="min-height:54px;"></textarea>
+
+        <div class="grid-3">
+          <div>
+            <label for="width">Largura</label>
+            <input id="width" type="number" value="480" step="16" />
+          </div>
+          <div>
+            <label for="height">Altura</label>
+            <input id="height" type="number" value="832" step="16" />
+          </div>
+          <div>
+            <label for="length">Frames</label>
+            <input id="length" type="number" value="33" step="4" />
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div>
+            <label for="steps">Steps</label>
+            <input id="steps" type="number" value="30" />
+          </div>
+          <div>
+            <label for="cfg">CFG</label>
+            <input id="cfg" type="number" value="6" step="0.5" />
+          </div>
+          <div>
+            <label for="seed">Seed (vazio = aleatória)</label>
+            <input id="seed" type="text" placeholder="Aleatória" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. Pós-produção Local (FFmpeg → 1080x1920)</h2>
+        <div class="grid-2">
+          <div>
+            <label for="fps">FPS de entrada (Wan)</label>
+            <input id="fps" type="number" value="16" />
+          </div>
+          <div>
+            <label for="crf">Qualidade (CRF, menor = melhor)</label>
+            <input id="crf" type="number" value="18" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label for="audio-path">Áudio/Música (opcional)</label>
+            <input id="audio-path" type="text" placeholder="assets/trilha.mp3" />
+          </div>
+          <div>
+            <label for="subtitles-path">Legenda .srt (opcional)</label>
+            <input id="subtitles-path" type="text" placeholder="assets/legenda.srt" />
+          </div>
+        </div>
+        <label class="checkbox-row">
+          <input id="nvenc" type="checkbox" checked />
+          Usar aceleração NVIDIA NVENC (GTX 1050 Ti)
+        </label>
+
+        <div class="row" style="margin-top: 18px;">
+          <button id="btn-run" class="primary" style="flex: 1;" onclick="runPipeline()">🚀 Gerar Vídeo Agora</button>
+          <button id="btn-pull" type="button" onclick="pullDrive()">☁️ Puxar do Drive</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coluna Direita -->
+    <section>
+      <div class="card">
+        <h2>Preview do Vídeo Final</h2>
+        <video id="player" controls playsinline></video>
+        <div id="player-actions" style="margin-top:10px; display:none;">
+          <a id="download-link" href="#" download><button type="button">⬇️ Baixar MP4</button></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Console de Execução (Ao Vivo)</h2>
+        <pre id="logs" class="logs">Pronto para iniciar.</pre>
+      </div>
+
+      <div class="card">
+        <h2>Vídeos Prontos (outputs/final/)</h2>
+        <div id="video-list" class="video-list">
+          <small style="color:var(--muted);">Nenhum vídeo gerado ainda.</small>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Cola Rápida para Vast.ai</h2>
+        <div class="preset-box">
+          <strong>Imagem Docker Pública:</strong>
+          <code id="docker-img">ghcr.io/bianobhz/fp-ai-video-factory:latest</code>
+          <button type="button" onclick="copyText('docker-img')">Copiar Imagem</button>
+        </div>
+        <div class="preset-box">
+          <strong>MODELS_TO_DOWNLOAD (Wan 2.1 1.3B — Teste Rápido):</strong>
+          <code id="models-13b">diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors,text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors,vae/wan_2.1_vae.safetensors</code>
+          <button type="button" onclick="copyText('models-13b')">Copiar Variável</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let workflowsLoaded = false;
+
+    async function testConnection() {
+      const badge = document.getElementById("conn-badge");
+      const server = document.getElementById("server-url").value.trim();
+      badge.className = "badge running";
+      badge.textContent = "Testando...";
+      try {
+        const res = await fetch("/api/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ server })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          badge.className = "badge ok";
+          badge.textContent = data.vram_gb ? `${data.gpu} (${data.vram_gb} GB)` : data.gpu;
+        } else {
+          badge.className = "badge error";
+          badge.textContent = "Offline";
+          alert("Não conectou no ComfyUI: " + data.error);
+        }
+      } catch (e) {
+        badge.className = "badge error";
+        badge.textContent = "Erro";
+      }
+    }
+
+    async function loadWorkflowDefaults() {
+      const wf = document.getElementById("workflow-select").value;
+      if (!wf) return;
+      const res = await fetch(`/api/workflow/${encodeURIComponent(wf)}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById("positive-prompt").value = d.positive_prompt || "";
+      document.getElementById("negative-prompt").value = d.negative_prompt || "";
+      document.getElementById("width").value = d.width || 480;
+      document.getElementById("height").value = d.height || 832;
+      document.getElementById("length").value = d.length || 33;
+      document.getElementById("steps").value = d.steps || 30;
+      document.getElementById("cfg").value = d.cfg || 6;
+    }
+
+    async function runPipeline() {
+      const payload = {
+        server: document.getElementById("server-url").value.trim(),
+        workflow: document.getElementById("workflow-select").value,
+        positive_prompt: document.getElementById("positive-prompt").value,
+        negative_prompt: document.getElementById("negative-prompt").value,
+        width: Number(document.getElementById("width").value),
+        height: Number(document.getElementById("height").value),
+        length: Number(document.getElementById("length").value),
+        steps: Number(document.getElementById("steps").value),
+        cfg: Number(document.getElementById("cfg").value),
+        seed: document.getElementById("seed").value.trim(),
+        fps: Number(document.getElementById("fps").value),
+        crf: Number(document.getElementById("crf").value),
+        audio_path: document.getElementById("audio-path").value.trim(),
+        subtitles_path: document.getElementById("subtitles-path").value.trim(),
+        nvenc: document.getElementById("nvenc").checked,
+      };
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.ok) alert(data.error || "Falha ao iniciar.");
+      refreshStatus();
+    }
+
+    async function pullDrive() {
+      const res = await fetch("/api/pull-drive", { method: "POST" });
+      const data = await res.json();
+      if (!data.ok) alert(data.error || "Falha ao puxar do Drive.");
+      refreshStatus();
+    }
+
+    function playVideo(url) {
+      const player = document.getElementById("player");
+      player.src = url;
+      player.play().catch(() => {});
+      document.getElementById("player-actions").style.display = "block";
+      document.getElementById("download-link").href = url;
+    }
+
+    function copyText(id) {
+      navigator.clipboard.writeText(document.getElementById(id).textContent);
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch("/api/status");
+        const data = await res.json();
+
+        if (!workflowsLoaded && data.workflows.length) {
+          const sel = document.getElementById("workflow-select");
+          sel.innerHTML = data.workflows.map(w => `<option value="${w}">${w}</option>`).join("");
+          workflowsLoaded = true;
+          loadWorkflowDefaults();
+        }
+
+        const badge = document.getElementById("job-badge");
+        const btnRun = document.getElementById("btn-run");
+        const btnPull = document.getElementById("btn-pull");
+        const isRunning = data.status === "running";
+        btnRun.disabled = isRunning;
+        btnPull.disabled = isRunning;
+
+        if (data.status === "running") {
+          badge.className = "badge running";
+          badge.textContent = "Gerando...";
+        } else if (data.status === "done") {
+          badge.className = "badge ok";
+          badge.textContent = "Concluído";
+        } else if (data.status === "error") {
+          badge.className = "badge error";
+          badge.textContent = "Erro";
+        } else {
+          badge.className = "badge";
+          badge.textContent = "Aguardando";
+        }
+
+        if (data.logs && data.logs.length) {
+          const logsEl = document.getElementById("logs");
+          logsEl.textContent = data.logs.join("\n");
+          logsEl.scrollTop = logsEl.scrollHeight;
+        }
+
+        const listEl = document.getElementById("video-list");
+        if (data.videos && data.videos.length) {
+          listEl.innerHTML = data.videos.map(v => `
+            <div class="video-item">
+              <div>
+                <strong>${v.name}</strong><br/>
+                <small>${v.size_mb} MB</small>
+              </div>
+              <div class="row">
+                <button type="button" onclick="playVideo('${v.url}')">▶️ Ver</button>
+                <a href="${v.url}" download><button type="button">⬇️</button></a>
+              </div>
+            </div>
+          `).join("");
+          if (data.last_video && !document.getElementById("player").src) {
+            playVideo(data.last_video);
+          }
+        }
+      } catch (_) {}
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 2000);
+  </script>
+</body>
+</html>
