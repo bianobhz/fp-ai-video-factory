@@ -1,0 +1,49 @@
+{
+  "title": "Um minuto de coragem — diálogo de teste 15s",
+  "description": "Teste vertical de diálogo cinematográfico em cafeteria, com falas curtas em português brasileiro, áudio separado por personagem e lip-sync por tomada.",
+  "duration_seconds": 15,
+  "fps": 16,
+  "width": 480,
+  "height": 832,
+  "frames_per_scene": 80,
+  "steps": 30,
+  "cfg": 5.5,
+  "negative_prompt": "cartoon, anime, CGI, 3D render, plastic skin, beauty filter, waxy face, uncanny valley, changing identity, different clothing, extra people, duplicate face, malformed face, asymmetrical eyes, deformed mouth, teeth artifacts, extra teeth, frozen expression, exaggerated acting, lip movement while silent, mouth moving for wrong speaker, subtitles, text, logo, watermark, flicker, jitter, camera shake, fast camera movement, harsh artificial lighting, over-sharpening",
+  "character_bible": {
+    "woman": "Same fictional adult Brazilian woman, 28 years old, shoulder-length dark brown wavy hair, natural skin texture, subtle makeup, mustard-yellow raincoat over dark green blouse, brown crossbody bag. Restrained anxious expression that softens into relief.",
+    "barista": "Same fictional adult Brazilian man, 30 years old, short curly black hair, natural skin texture, cream shirt and forest-green apron. Calm, warm expression, understated gestures.",
+    "location": "Same small real neighborhood café on a rainy afternoon, warm practical tungsten lights, wooden counter, rain-streaked window, restrained background activity, no visible readable signs or logos."
+  },
+  "audio_design": {
+    "dialogue_language": "pt-BR",
+    "music": "none during test; prioritize intelligible natural dialogue",
+    "ambience": "quiet café room tone, soft rain against window, faint cup and espresso machine sounds only between lines; keep ambience low beneath speech",
+    "mix": "dialogue centered and clear, gentle natural room reverb, no robotic narration, no overlapping dialogue"
+  },
+  "shots": [
+    {
+      "name": "01_mulher_desabafo",
+      "duration_seconds": 5,
+      "speaker": "woman",
+      "dialogue": "A entrevista é em dez minutos... e eu ainda estou tremendo.",
+      "voice_direction": "Brazilian Portuguese, natural conversational female voice, slightly breathless from rain and nerves, quiet and sincere, not theatrical; short hesitation before 'e eu'.",
+      "prompt": "Photorealistic live-action cinematic close-up, vertical 9:16, one continuous 5-second shot in the character-bible café. The same fictional adult Brazilian woman from the character bible is framed from shoulders up at the wooden counter; her face is unobstructed, centered, well lit, sharp and large enough for precise mouth animation. She looks toward the barista just off camera and speaks one short sentence with subtle natural jaw and cheek movement, anxious but composed, one small breath and a brief glance down before looking back. Keep the camera nearly locked with only a very slow gentle push-in; shallow depth of field, realistic pores and fine hair, practical warm café lighting with cool rainy window bokeh. No other visible person, no cut, no text, no generated captions."
+    },
+    {
+      "name": "02_barista_responde",
+      "duration_seconds": 5,
+      "speaker": "barista",
+      "dialogue": "Respira. Um café e um minuto de calma. Você vai conseguir.",
+      "voice_direction": "Brazilian Portuguese, natural warm male voice, reassuring but understated, conversational pace with a gentle pause after 'Respira'; no announcer delivery.",
+      "prompt": "Photorealistic live-action cinematic close-up, vertical 9:16, one continuous 5-second shot in the exact same character-bible café. The same fictional adult Brazilian male barista from the character bible is framed from shoulders up behind the wooden counter; face unobstructed, centered, evenly lit, sharp and large for precise mouth animation. He looks toward the woman just off camera and speaks one short reassuring sentence, with restrained natural jaw, lips and cheek movement, a slight empathetic smile only at the end. Keep the camera almost locked with a subtle slow push-in; natural eye movement, realistic skin texture, soft warm practical lights, shallow depth of field. No other visible person, no cut, no text, no generated captions."
+    },
+    {
+      "name": "03_mulher_agradece",
+      "duration_seconds": 5,
+      "speaker": "woman",
+      "dialogue": "Obrigada. Eu precisava ouvir isso.",
+      "voice_direction": "Same Brazilian Portuguese female voice as shot 1; relief replacing anxiety, soft genuine half-smile, intimate conversational delivery, no melodrama.",
+      "prompt": "Photorealistic live-action cinematic close-up, vertical 9:16, one continuous 5-second shot in the exact same character-bible café. The same fictional adult Brazilian woman from shot 1, identical hair, face and wardrobe, framed from shoulders up; face unobstructed, centered, evenly lit and sharp for precise mouth animation. She looks toward the barista just off camera and says a brief thank-you, her shoulders visibly relax and a restrained genuine half-smile appears after she finishes speaking. Keep the camera nearly locked; subtle human micro-expressions, natural blink, realistic skin and hair, warm practical café light, rain softly blurred behind her. No other visible person, no cut, no text, no generated captions."
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 Pipeline híbrida, descartável e escalável (**"liga, puxa, gera e destrói"**) para produção de vídeos curtos hiper-realistas com IA (TikTok, Reels, YouTube Shorts).
 
+**Princípio profissional:** cada peça deve respeitar as referências reais do produto e do ambiente e só é considerada pronta depois de revisão visual, temporal, sonora e de marca. Consulte [docs/production-standard.md](docs/production-standard.md).
+
 ## Arquitetura
 - **Nuvem (Vast.ai):** GPU 24 GB VRAM sob demanda apenas para inferência pesada no ComfyUI (`80–100 GB` de disco recomendados).
 - **Google Drive:** Cofre de modelos pesados (`IA_Studio/models/`) e destino dos vídeos gerados (`IA_Studio/outputs/`).
@@ -48,3 +50,17 @@ Pipeline híbrida, descartável e escalável (**"liga, puxa, gera e destrói"**)
      ```
 
 O container irá decodificar o `rclone.conf` em memória/arquivo seguro (`chmod 600`), baixar **apenas** os modelos listados em `MODELS_TO_DOWNLOAD` e iniciar o ComfyUI na porta `8188`.
+
+---
+
+## 3. Gerar uma história com várias cenas
+
+O painel gera uma tomada por solicitação. Para montar uma narrativa longa com continuidade visual, use o gerador em lote. Cada prompt do storyboard vira uma tomada; o script baixa os frames, concatena as cenas, queima as legendas e produz um MP4 vertical.
+
+Exemplo de história de 40 segundos:
+
+```powershell
+python scripts/story_batch.py workflows/stories/cafe_cuidado_40s.json --server http://IP-DA-VAST:PORTA
+```
+
+O endpoint precisa usar a porta pública mapeada para `8188` pela Vast.ai. A história exemplo cria personagens fictícios fotorrealistas; a consistência de rosto entre tomadas independentes pode variar. Para uma trilha, passe um arquivo de áudio que você tenha direito de publicar com `--audio caminho\trilha.mp3`.

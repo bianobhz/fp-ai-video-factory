@@ -28,7 +28,7 @@ def run_ffmpeg(
     if subtitles_file is not None:
         escaped_subs = str(subtitles_file).replace("\\", "/").replace(":", "\\:")
         vf_filters.append(
-            f"subtitles='{escaped_subs}':force_style='FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=60'"
+            f"subtitles='{escaped_subs}':force_style='FontName=Arial,FontSize=7,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=1,Alignment=2,MarginV=30'"
         )
 
     cmd = ["ffmpeg", "-y", "-i", str(input_video)]

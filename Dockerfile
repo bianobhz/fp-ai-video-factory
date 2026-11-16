@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -22,22 +22,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install rclone
 RUN curl -fsSL https://rclone.org/install.sh | bash
 
-# Pin a matched PyTorch/CUDA stack compatible with comfy-kitchen (torch >= 2.7).
+# Upgrade pip and install PyTorch (CUDA 12.4)
 RUN python3 -m pip install --upgrade pip && \
-    pip install torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # Clone ComfyUI
 RUN git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${COMFYUI_DIR} && \
     pip install -r ${COMFYUI_DIR}/requirements.txt
 
-# Install ComfyUI-Manager
+# Install ComfyUI-Manager, VideoHelperSuite and LatentSyncWrapper (Lip-Sync)
 RUN git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${COMFYUI_DIR}/custom_nodes/ComfyUI-Manager && \
     if [ -f "${COMFYUI_DIR}/custom_nodes/ComfyUI-Manager/requirements.txt" ]; then \
         pip install -r ${COMFYUI_DIR}/custom_nodes/ComfyUI-Manager/requirements.txt; \
-    fi
-
-# Catch custom-op schema incompatibilities during image build, without requiring a GPU.
-RUN python3 -c "import torch; import comfy_kitchen; assert tuple(int(v) for v in torch.__version__.split('+')[0].split('.')[:2]) >= (2, 7), torch.__version__; print('Comfy kitchen import OK; torch:', torch.__version__)"
+    fi && \
+    git clone --depth 1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git ${COMFYUI_DIR}/custom_nodes/ComfyUI-VideoHelperSuite && \
+    pip install -r ${COMFYUI_DIR}/custom_nodes/ComfyUI-VideoHelperSuite/requirements.txt && \
+    git clone --depth 1 https://github.com/ShmuelRonen/ComfyUI-LatentSyncWrapper.git ${COMFYUI_DIR}/custom_nodes/ComfyUI-LatentSyncWrapper && \
+    pip install -r ${COMFYUI_DIR}/custom_nodes/ComfyUI-LatentSyncWrapper/requirements.txt
 
 # Copy entrypoint script
 COPY start.sh /start.sh

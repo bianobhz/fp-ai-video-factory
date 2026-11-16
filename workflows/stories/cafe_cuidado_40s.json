@@ -1,0 +1,48 @@
+{
+  "title": "Um café, um gesto — 40 segundos",
+  "description": "Filme vertical conceitual para redes sociais: uma pequena cafeteria transforma um dia difícil com um gesto de cuidado.",
+  "frames_per_scene": 81,
+  "fps": 16,
+  "duration_seconds": 40,
+  "narration": "Ela chegou correndo, encharcada e com a cabeça a mil. A poucos minutos da entrevista, a coragem parecia ter acabado. No balcão, o barista percebeu sua mão trêmula e não perguntou nada. Só trouxe café quente, um pãozinho e um sorriso. Ela respirou fundo e saiu mais leve. Horas depois, voltou sorrindo. Entregou um bilhete de agradecimento. O barista se emocionou, e os dois dividiram outro café. Às vezes, um gesto simples muda o dia de alguém. Toda marca também pode contar histórias que ficam. FP AI Video Factory. Cenas e personagens gerados por inteligência artificial.",
+  "width": 480,
+  "height": 832,
+  "steps": 30,
+  "cfg": 6,
+  "negative_prompt": "cartoon, anime, illustration, 3D render, plastic skin, changing identity, duplicate people, extra limbs, extra fingers, deformed hands, malformed face, warped cup, floating objects, unreadable text, letters, logo, watermark, subtitles, flicker, jitter, strobing, sudden camera shake, jump cut, frozen motion, blurry subject, low detail, exaggerated acting",
+  "subtitles": "cafe_cuidado_40s.srt",
+  "shots": [
+    {
+      "name": "01_porta_chuva",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second shot. A strong first-second hook: heavy rain splashes against the glass door of a tiny warm neighborhood café. The same fictional adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat over a dark green blouse, brown crossbody bag, rushes inside, soaked and visibly anxious. She pauses, glances at a phone with a blank unreadable screen, then looks toward the counter. Fast but smooth camera push from rain on glass to her worried eyes; warm amber café light against cool rainy street, believable human motion, cinematic realism, no readable text."
+    },
+    {
+      "name": "02_barista_percebe",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second shot inside the same small cozy neighborhood café with warm amber light, wooden counter and rain-streaked front window. The same fictional adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat, dark green blouse, brown crossbody bag, waits nervously at the counter and fidgets with her phone, screen blank and unreadable. The same adult Brazilian male barista, age 30, short curly black hair, cream shirt and forest-green apron, notices her tense expression and gives a gentle reassuring look. Natural eye contact, subtle facial emotion, restrained camera move, consistent characters and wardrobe, realistic skin and hands, no text."
+    },
+    {
+      "name": "03_gesto_de_cuidado",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second medium shot at the same wooden counter in the same warm neighborhood café. The same adult Brazilian male barista, age 30, short curly black hair, cream shirt and forest-green apron, carefully sets down a steaming ceramic coffee and a small golden pastry for the same adult Brazilian woman, age 28, dark brown wavy shoulder-length hair, mustard-yellow raincoat, dark green blouse, brown crossbody bag. He offers it with a quiet kind smile; she looks surprised, meets his eyes, and her tense expression softens. Clear human interaction, natural hands, slow cinematic dolly, realistic steam and warm light, no readable text or logos."
+    },
+    {
+      "name": "04_a_pausa",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second intimate shot at the café window. The same adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat and dark green blouse, sits alone with the same ceramic coffee and small pastry. She takes a careful sip, closes her eyes for one calm breath, then smiles faintly as her shoulders relax. Rain runs down the glass behind her; the same barista in a forest-green apron is softly visible in the background, returning to work. Slow gentle push-in, expressive but subtle acting, lifelike face, shallow depth of field, no text."
+    },
+    {
+      "name": "05_coragem_para_ir",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second shot at the entrance of the same neighborhood café. The same adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat, dark green blouse, brown crossbody bag, finishes her coffee, stands with renewed confidence, opens a dark umbrella and steps back into the rain. The same adult Brazilian male barista, age 30, curly black hair, cream shirt and forest-green apron, gives her an encouraging nod from the doorway. She looks back, smiles gratefully, and heads down the sidewalk. Smooth camera follows her for two steps; warm light spills onto wet pavement, believable motion, no text."
+    },
+    {
+      "name": "06_volta_com_sorriso",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second shot later that same day at the same neighborhood café. The same adult Brazilian woman, age 28, same recognizable shoulder-length dark brown wavy hair, mustard-yellow raincoat now dry, dark green blouse and brown crossbody bag, opens the door in golden late-afternoon light. She looks relieved and genuinely happy. The same adult Brazilian male barista, age 30, short curly black hair, cream shirt and forest-green apron, recognizes her from behind the counter and smiles back. A subtle time-of-day change, same café layout and characters, cinematic camera move, no readable text."
+    },
+    {
+      "name": "07_o_bilhete",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second medium close shot across the same wooden café counter. The same adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat, dark green blouse and brown crossbody bag, hands the same adult Brazilian male barista, age 30, curly black hair, cream shirt and forest-green apron, a small folded blank thank-you card with no legible writing. She speaks silently with a grateful expression; he receives it with a touched smile and places a fresh coffee beside her. Natural reciprocal gestures, clear faces and hands, warm cinematic light, no text or logos."
+    },
+    {
+      "name": "08_final_cuidado",
+      "prompt": "Photorealistic live-action cinematic short film, vertical 9:16 composition, one continuous 5-second closing shot in the same cozy neighborhood café. The same adult Brazilian woman, age 28, shoulder-length dark brown wavy hair, mustard-yellow raincoat and dark green blouse, and the same adult Brazilian male barista, age 30, short curly black hair, cream shirt and forest-green apron, share a sincere laugh across the counter. In the foreground, a beautifully prepared ceramic coffee and golden pastry catch the warm window light. The woman lifts the cup in a small grateful toast; the barista smiles. Camera gently pulls back, leaving clean uncluttered space in the upper third for a post-production end card, emotionally satisfying, realistic faces and movement, no generated text, no logo, no watermark."
+    }
+  ]
+}

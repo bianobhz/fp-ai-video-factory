@@ -21,7 +21,9 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
+
+import studio_api
 
 REPO_ROOT = Path(__file__).resolve().parent
 WEB_DIR = REPO_ROOT / "web"
@@ -90,52 +92,7 @@ def patch_workflow(workflow_path: Path, params: dict) -> Path:
     with open(workflow_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    pos_prompt = (params.get("positive_prompt") or "").strip()
-    neg_prompt = (params.get("negative_prompt") or "").strip()
-    seed = params.get("seed")
-    steps = params.get("steps")
-    cfg = params.get("cfg")
-    width = params.get("width")
-    height = params.get("height")
-    length = params.get("length")
-
-    # Patch KSampler and linked positive/negative CLIPTextEncode nodes if present
-    ksampler_node = None
-    for node in data.values():
-        if isinstance(node, dict) and node.get("class_type") == "KSampler":
-            ksampler_node = node
-            break
-
-    if ksampler_node:
-        inputs = ksampler_node.setdefault("inputs", {})
-        if seed is not None and str(seed).strip() != "":
-            inputs["seed"] = int(seed)
-        else:
-            inputs["seed"] = random.randint(1, 2**48 - 1)
-        if steps is not None:
-            inputs["steps"] = int(steps)
-        if cfg is not None:
-            inputs["cfg"] = float(cfg)
-
-        pos_ref = inputs.get("positive")
-        neg_ref = inputs.get("negative")
-        if pos_prompt and isinstance(pos_ref, list) and str(pos_ref[0]) in data:
-            data[str(pos_ref[0])].setdefault("inputs", {})["text"] = pos_prompt
-        if neg_prompt and isinstance(neg_ref, list) and str(neg_ref[0]) in data:
-            data[str(neg_ref[0])].setdefault("inputs", {})["text"] = neg_prompt
-
-    for node in data.values():
-        if isinstance(node, dict) and node.get("class_type") in (
-            "EmptyHunyuanLatentVideo",
-            "EmptyWanLatentVideo",
-        ):
-            inputs = node.setdefault("inputs", {})
-            if width is not None:
-                inputs["width"] = int(width)
-            if height is not None:
-                inputs["height"] = int(height)
-            if length is not None:
-                inputs["length"] = int(length)
+    studio_api.patch_workflow_nodes(data, params)
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
     patched_path = TMP_DIR / f"workflow_{int(time.time())}.json"
@@ -210,6 +167,31 @@ def run_pipeline_thread(params: dict) -> None:
             JOBS.status = "error"
             JOBS.error_message = str(exc)
         JOBS.append_log(f"[admin] ERRO: {exc}")
+
+
+def run_queue_thread(server_url: str) -> None:
+    try:
+        queue = studio_api.load_queue()
+        if not queue:
+            raise ValueError("A fila de produção está vazia.")
+        last_name = None
+        for idx, proj in enumerate(list(queue), start=1):
+            JOBS.append_log(f"[fila] Processando item {idx}/{len(queue)}: {proj.get('title', 'sem_titulo')}")
+            out_path = studio_api.build_dialogue_project(proj, server_url, JOBS.append_log)
+            last_name = out_path.name
+            remaining = [item for item in studio_api.load_queue() if item.get("id") != proj.get("id")]
+            studio_api.save_queue(remaining)
+
+        with JOBS.lock:
+            JOBS.status = "done"
+            if last_name:
+                JOBS.last_video = f"/media/{last_name}"
+        JOBS.append_log("[fila] Todos os projetos da fila foram concluídos!")
+    except Exception as exc:
+        with JOBS.lock:
+            JOBS.status = "error"
+            JOBS.error_message = str(exc)
+        JOBS.append_log(f"[fila] ERRO: {exc}")
 
 
 def run_pull_drive_thread() -> None:
@@ -301,24 +283,44 @@ class AdminHandler(BaseHTTPRequestHandler):
                 return
             with open(wf_path, "r", encoding="utf-8") as f:
                 wf = json.load(f)
-            meta = {"positive_prompt": "", "negative_prompt": "", "width": 480, "height": 832, "length": 33, "steps": 30, "cfg": 6}
-            for node in wf.values():
-                if isinstance(node, dict) and node.get("class_type") == "KSampler":
-                    inp = node.get("inputs", {})
-                    meta["steps"] = inp.get("steps", 30)
-                    meta["cfg"] = inp.get("cfg", 6)
-                    pos_ref = inp.get("positive")
-                    neg_ref = inp.get("negative")
-                    if isinstance(pos_ref, list) and str(pos_ref[0]) in wf:
-                        meta["positive_prompt"] = wf[str(pos_ref[0])].get("inputs", {}).get("text", "")
-                    if isinstance(neg_ref, list) and str(neg_ref[0]) in wf:
-                        meta["negative_prompt"] = wf[str(neg_ref[0])].get("inputs", {}).get("text", "")
-                if isinstance(node, dict) and node.get("class_type") in ("EmptyHunyuanLatentVideo", "EmptyWanLatentVideo"):
-                    inp = node.get("inputs", {})
-                    meta["width"] = inp.get("width", 480)
-                    meta["height"] = inp.get("height", 832)
-                    meta["length"] = inp.get("length", 33)
-            self.send_json(meta)
+            self.send_json(studio_api.extract_workflow_meta(wf))
+            return
+
+        if path == "/api/queue":
+            self.send_json({"items": studio_api.load_queue()})
+            return
+
+        if path == "/api/comfy-queue":
+            qs = parse_qs(parsed.query)
+            server = (qs.get("server", [""])[0] or "").strip().rstrip("/")
+            if not server:
+                self.send_json({"ok": False, "running": 0, "pending": 0})
+                return
+            try:
+                with urllib.request.urlopen(f"{server}/queue", timeout=5) as resp:
+                    qdata = json.loads(resp.read().decode("utf-8"))
+                self.send_json({
+                    "ok": True,
+                    "running": len(qdata.get("queue_running", [])),
+                    "pending": len(qdata.get("queue_pending", [])),
+                })
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc), "running": 0, "pending": 0})
+            return
+
+        if path.startswith("/tmp-media/"):
+            filename = unquote(path[len("/tmp-media/"):])
+            file_path = (TMP_DIR / filename).resolve()
+            if file_path.parent != TMP_DIR.resolve() or not file_path.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND, "Temp media not found")
+                return
+            mime, _ = mimetypes.guess_type(str(file_path))
+            data = file_path.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", mime or "audio/mpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
             return
 
         if path.startswith("/media/"):
@@ -391,6 +393,72 @@ class AdminHandler(BaseHTTPRequestHandler):
                 JOBS.started_at = time.time()
 
             t = threading.Thread(target=run_pull_drive_thread, daemon=True)
+            t.start()
+            self.send_json({"ok": True})
+            return
+
+        if path == "/api/tts-preview":
+            body = self.read_json()
+            text = (body.get("text") or "").strip()
+            voice = body.get("voice") or "pt-BR-FranciscaNeural"
+            if not text:
+                self.send_json({"ok": False, "error": "Texto vazio."}, status=400)
+                return
+            try:
+                fname = f"tts_{int(time.time() * 1000)}.mp3"
+                studio_api.synthesize_tts(text, voice, TMP_DIR / fname)
+                self.send_json({"ok": True, "url": f"/tmp-media/{fname}"})
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
+        if path == "/api/ai-copilot":
+            body = self.read_json()
+            goal = (body.get("goal") or "").strip()
+            provider = body.get("provider") or "gemini"
+            api_key = (body.get("api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
+            if not goal:
+                self.send_json({"ok": False, "error": "Descreva o vídeo que você quer criar."}, status=400)
+                return
+            if not api_key:
+                self.send_json({"ok": False, "error": "Informe sua chave da API (Gemini ou OpenAI)."}, status=400)
+                return
+            try:
+                plan = studio_api.call_ai_copilot(goal, api_key, provider)
+                self.send_json({"ok": True, "plan": plan})
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
+        if path == "/api/queue":
+            body = self.read_json()
+            items = studio_api.load_queue()
+            body["id"] = f"q_{int(time.time() * 1000)}"
+            items.append(body)
+            studio_api.save_queue(items)
+            self.send_json({"ok": True, "items": items})
+            return
+
+        if path == "/api/queue/delete":
+            body = self.read_json()
+            target_id = body.get("id")
+            items = [i for i in studio_api.load_queue() if i.get("id") != target_id]
+            studio_api.save_queue(items)
+            self.send_json({"ok": True, "items": items})
+            return
+
+        if path == "/api/queue/run":
+            body = self.read_json()
+            server = (body.get("server") or "http://127.0.0.1:8188").strip()
+            with JOBS.lock:
+                if JOBS.status == "running":
+                    self.send_json({"ok": False, "error": "Já existe um job em execução."}, status=409)
+                    return
+                JOBS.status = "running"
+                JOBS.logs = ["[fila] Iniciando processamento da fila na Vast.ai..."]
+                JOBS.error_message = None
+                JOBS.started_at = time.time()
+            t = threading.Thread(target=run_queue_thread, args=(server,), daemon=True)
             t.start()
             self.send_json({"ok": True})
             return

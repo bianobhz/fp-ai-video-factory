@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FP AI Video Factory — Painel Administrativo</title>
+  <title>FP AI Video Factory — Studio v2</title>
   <style>
     :root {
-      --bg: #0b0e14;
-      --panel: #131822;
-      --panel-2: #1a2130;
-      --border: #263043;
+      --bg: #0b0f17;
+      --panel: #131a26;
+      --panel-2: #192233;
+      --border: #263248;
       --text: #e6edf7;
-      --muted: #8b9bb4;
-      --accent: #6366f1;
-      --accent-hover: #4f46e5;
+      --muted: #8fa1bd;
+      --accent: #3b82f6;
+      --accent-2: #8b5cf6;
       --ok: #10b981;
       --warn: #f59e0b;
       --err: #ef4444;
@@ -21,465 +21,547 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.45;
     }
     header {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
       align-items: center;
-      padding: 16px 28px;
-      border-bottom: 1px solid var(--border);
+      justify-content: space-between;
+      padding: 14px 22px;
       background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
     }
-    header h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
     .badge {
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-      background: var(--panel-2);
+      font-size: 11px; padding: 3px 8px; border-radius: 999px;
+      background: rgba(59,130,246,.18); color: #93c5fd; border: 1px solid rgba(59,130,246,.35);
+    }
+    .server-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select, textarea {
+      background: #0d131d;
+      color: var(--text);
       border: 1px solid var(--border);
-      color: var(--muted);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
     }
-    .badge.ok { color: var(--ok); border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.1); }
-    .badge.running { color: var(--warn); border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.1); }
-    .badge.error { color: var(--err); border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.1); }
-
-    main {
-      max-width: 1380px;
-      margin: 24px auto;
-      padding: 0 20px;
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .9; }
+    button.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+    button.purple { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+    button.ok { background: var(--ok); }
+    button.danger { background: rgba(239,68,68,.18); color: #fca5a5; border: 1px solid rgba(239,68,68,.35); }
+    .layout {
       display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 20px;
+      grid-template-columns: 1.35fr 0.95fr;
+      gap: 18px;
+      padding: 18px 22px;
+      max-width: 1600px;
+      margin: 0 auto;
     }
-    @media (max-width: 980px) {
-      main { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
+      padding: 16px;
+      margin-bottom: 16px;
     }
-    .card h2 {
-      margin: 0 0 14px;
-      font-size: 15px;
-      font-weight: 600;
-      color: #fff;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .card h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tab {
+      background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;
     }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 6px;
-      margin-top: 12px;
-    }
-    input[type="text"], input[type="number"], select, textarea {
-      width: 100%;
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .scene-box {
       background: var(--panel-2);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: var(--text);
-      font-size: 13px;
-      font-family: inherit;
-    }
-    textarea { resize: vertical; min-height: 76px; }
-    input:focus, select:focus, textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-    .row { display: flex; gap: 12px; align-items: center; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-
-    button {
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      transition: 0.15s ease;
-    }
-    button:hover:not(:disabled) { border-color: var(--accent); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
-
-    .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 14px;
-      font-size: 13px;
-    }
-    .checkbox-row input { width: auto; }
-
-    pre.logs {
-      background: #070a0f;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      height: 240px;
-      overflow-y: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
-      color: #cbd5e1;
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    video {
-      width: 100%;
-      max-height: 420px;
       border-radius: 10px;
-      background: #000;
-      border: 1px solid var(--border);
+      padding: 12px;
+      margin-bottom: 10px;
     }
-    .video-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 220px;
-      overflow-y: auto;
-    }
-    .video-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 12px;
-      background: var(--panel-2);
+    .scene-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 600; font-size: 13px; }
+    .logs {
+      background: #070a10;
       border: 1px solid var(--border);
       border-radius: 8px;
-      font-size: 13px;
-    }
-    .video-item small { color: var(--muted); }
-    .preset-box {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px 12px;
+      padding: 10px;
+      font-family: Consolas, monospace;
       font-size: 12px;
-      margin-top: 8px;
+      height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      color: #cbd5e1;
     }
-    .preset-box code {
-      display: block;
-      color: #93c5fd;
-      word-break: break-all;
-      margin: 6px 0;
-      font-family: ui-monospace, monospace;
+    .queue-item {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; margin-bottom: 8px; font-size: 13px;
     }
+    .video-list { display: grid; gap: 10px; max-height: 440px; overflow-y: auto; }
+    .video-card {
+      background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px;
+    }
+    video { width: 100%; max-height: 360px; border-radius: 8px; background: #000; margin-top: 6px; }
+    .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #1e293b; color: var(--muted); }
+    .pill.running { background: rgba(245,158,11,.2); color: #fcd34d; }
+    .pill.done { background: rgba(16,185,129,.2); color: #6ee7b7; }
+    .pill.error { background: rgba(239,68,68,.2); color: #fca5a5; }
   </style>
 </head>
 <body>
   <header>
-    <h1>🎬 FP AI Video Factory — Painel Administrativo</h1>
-    <span id="job-badge" class="badge">Aguardando</span>
+    <div class="brand">
+      <span>FP AI Video Factory</span>
+      <span class="badge">Studio v2 • Wan 2.2 14B</span>
+    </div>
+    <div class="server-bar">
+      <input id="serverUrl" type="text" style="width:240px" value="http://136.59.129.136:33484" placeholder="URL ComfyUI (Vast.ai)" />
+      <button class="secondary" onclick="testConnection()">Testar GPU</button>
+      <span id="gpuStatus" class="pill">GPU: não testada</span>
+      <span id="comfyQueuePill" class="pill">Fila GPU: -</span>
+      <button class="secondary" onclick="pullDrive()">Sync Drive</button>
+    </div>
   </header>
 
-  <main>
-    <!-- Coluna Esquerda -->
-    <section>
+  <div class="layout">
+    <div>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('studio', this)">Estúdio de Cenas &amp; IA</div>
+        <div class="tab" onclick="switchTab('single', this)">Clipe Rápido (Avulso)</div>
+      </div>
+
+      <div id="tab-studio">
+        <div class="card">
+          <h2>
+            <span>Copiloto de IA (Roteiro + Prompts Automáticos)</span>
+            <span class="pill">Offline / Local</span>
+          </h2>
+          <div class="grid-2" style="margin-bottom:8px;">
+            <div>
+              <label>Provedor IA</label>
+              <select id="aiProvider" style="width:100%">
+                <option value="gemini">Google Gemini (2.5 Flash)</option>
+                <option value="openai">OpenAI (GPT-4o-mini)</option>
+              </select>
+            </div>
+            <div>
+              <label>API Key (salva só no seu navegador)</label>
+              <input id="aiKey" type="password" style="width:100%" placeholder="Cole sua chave Gemini ou OpenAI" onchange="localStorage.setItem('fp_ai_key', this.value)" />
+            </div>
+          </div>
+          <label>O que você quer criar? (Descreva em português)</label>
+          <div style="display:flex; gap:8px;">
+            <textarea id="aiGoal" rows="2" style="flex:1" placeholder="Ex: Crie um diálogo de 15s entre um homem e uma mulher num café comemorando a aprovação de um projeto, tom natural e realista."></textarea>
+            <button class="purple" onclick="runCopilot()" id="btnCopilot">Gerar Roteiro</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>
+            <span>Editor de Cenas &amp; Diálogos</span>
+            <button class="secondary" onclick="addScene()">+ Nova Cena</button>
+          </h2>
+          <div class="grid-3" style="margin-bottom:12px;">
+            <div>
+              <label>Título do Projeto</label>
+              <input id="projTitle" type="text" style="width:100%" value="dialogo_wan22" />
+            </div>
+            <div>
+              <label>Workflow Base</label>
+              <select id="studioWorkflow" style="width:100%"></select>
+            </div>
+            <div>
+              <label>Resolução / Frames</label>
+              <div style="display:flex; gap:4px;">
+                <input id="stWidth" type="number" value="720" style="width:33%" />
+                <input id="stHeight" type="number" value="1280" style="width:33%" />
+                <input id="stLength" type="number" value="81" style="width:34%" />
+              </div>
+            </div>
+          </div>
+
+          <div id="scenesContainer"></div>
+
+          <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+            <button class="secondary" onclick="enqueueProject()">Salvar na Fila Offline</button>
+            <button class="ok" onclick="runQueue()">Processar Fila na Vast.ai</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>
+            <span>Fila de Produção Offline</span>
+            <span id="queueCount" class="pill">0 itens</span>
+          </h2>
+          <div id="queueList"></div>
+        </div>
+      </div>
+
+      <div id="tab-single" style="display:none;">
+        <div class="card">
+          <h2>Geração de Clipe Avulso</h2>
+          <div class="grid-2" style="margin-bottom:10px;">
+            <div>
+              <label>Workflow</label>
+              <select id="singleWorkflow" style="width:100%" onchange="loadSingleWorkflowMeta()"></select>
+            </div>
+            <div>
+              <label>Seed (vazio = aleatória)</label>
+              <input id="sSeed" type="text" style="width:100%" placeholder="Aleatória" />
+            </div>
+          </div>
+          <label>Prompt Positivo (Inglês)</label>
+          <textarea id="sPos" rows="3" style="width:100%; margin-bottom:8px;"></textarea>
+          <label>Prompt Negativo</label>
+          <textarea id="sNeg" rows="2" style="width:100%; margin-bottom:8px;"></textarea>
+          <div class="grid-3" style="margin-bottom:12px;">
+            <div><label>Largura</label><input id="sW" type="number" style="width:100%" value="720" /></div>
+            <div><label>Altura</label><input id="sH" type="number" style="width:100%" value="1280" /></div>
+            <div><label>Frames</label><input id="sL" type="number" style="width:100%" value="81" /></div>
+          </div>
+          <button class="purple" onclick="runSingle()">Gerar Clipe Agora</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
       <div class="card">
         <h2>
-          1. Conexão Vast.ai (ComfyUI)
-          <span id="conn-badge" class="badge">Não testado</span>
+          <span>Monitor de Execução</span>
+          <span id="jobStatus" class="pill">idle</span>
         </h2>
-        <label for="server-url">URL do Endpoint ComfyUI (porta 8188)</label>
-        <div class="row">
-          <input id="server-url" type="text" value="http://127.0.0.1:8188" placeholder="http://IP-DA-VAST:8188" />
-          <button type="button" onclick="testConnection()">Testar</button>
-        </div>
+        <div id="logsBox" class="logs">Aguardando comandos...</div>
       </div>
 
       <div class="card">
-        <h2>2. Prompt e Parâmetros do Vídeo</h2>
-        <label for="workflow-select">Workflow</label>
-        <select id="workflow-select" onchange="loadWorkflowDefaults()"></select>
-
-        <label for="positive-prompt">Prompt Positivo (Cena)</label>
-        <textarea id="positive-prompt" placeholder="Descreva a cena hiper-realista..."></textarea>
-
-        <label for="negative-prompt">Prompt Negativo</label>
-        <textarea id="negative-prompt" style="min-height:54px;"></textarea>
-
-        <div class="grid-3">
-          <div>
-            <label for="width">Largura</label>
-            <input id="width" type="number" value="480" step="16" />
-          </div>
-          <div>
-            <label for="height">Altura</label>
-            <input id="height" type="number" value="832" step="16" />
-          </div>
-          <div>
-            <label for="length">Frames</label>
-            <input id="length" type="number" value="33" step="4" />
-          </div>
-        </div>
-
-        <div class="grid-3">
-          <div>
-            <label for="steps">Steps</label>
-            <input id="steps" type="number" value="30" />
-          </div>
-          <div>
-            <label for="cfg">CFG</label>
-            <input id="cfg" type="number" value="6" step="0.5" />
-          </div>
-          <div>
-            <label for="seed">Seed (vazio = aleatória)</label>
-            <input id="seed" type="text" placeholder="Aleatória" />
-          </div>
-        </div>
+        <h2>
+          <span>Galeria — Vídeos Prontos (outputs/final)</span>
+          <button class="secondary" onclick="refreshStatus()">Atualizar</button>
+        </h2>
+        <div id="videosList" class="video-list"></div>
       </div>
+    </div>
+  </div>
 
-      <div class="card">
-        <h2>3. Pós-produção Local (FFmpeg → 1080x1920)</h2>
-        <div class="grid-2">
-          <div>
-            <label for="fps">FPS de entrada (Wan)</label>
-            <input id="fps" type="number" value="16" />
-          </div>
-          <div>
-            <label for="crf">Qualidade (CRF, menor = melhor)</label>
-            <input id="crf" type="number" value="18" />
-          </div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label for="audio-path">Áudio/Música (opcional)</label>
-            <input id="audio-path" type="text" placeholder="assets/trilha.mp3" />
-          </div>
-          <div>
-            <label for="subtitles-path">Legenda .srt (opcional)</label>
-            <input id="subtitles-path" type="text" placeholder="assets/legenda.srt" />
-          </div>
-        </div>
-        <label class="checkbox-row">
-          <input id="nvenc" type="checkbox" checked />
-          Usar aceleração NVIDIA NVENC (GTX 1050 Ti)
-        </label>
-
-        <div class="row" style="margin-top: 18px;">
-          <button id="btn-run" class="primary" style="flex: 1;" onclick="runPipeline()">🚀 Gerar Vídeo Agora</button>
-          <button id="btn-pull" type="button" onclick="pullDrive()">☁️ Puxar do Drive</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Coluna Direita -->
-    <section>
-      <div class="card">
-        <h2>Preview do Vídeo Final</h2>
-        <video id="player" controls playsinline></video>
-        <div id="player-actions" style="margin-top:10px; display:none;">
-          <a id="download-link" href="#" download><button type="button">⬇️ Baixar MP4</button></a>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Console de Execução (Ao Vivo)</h2>
-        <pre id="logs" class="logs">Pronto para iniciar.</pre>
-      </div>
-
-      <div class="card">
-        <h2>Vídeos Prontos (outputs/final/)</h2>
-        <div id="video-list" class="video-list">
-          <small style="color:var(--muted);">Nenhum vídeo gerado ainda.</small>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Cola Rápida para Vast.ai</h2>
-        <div class="preset-box">
-          <strong>Imagem Docker Pública:</strong>
-          <code id="docker-img">ghcr.io/bianobhz/fp-ai-video-factory:latest</code>
-          <button type="button" onclick="copyText('docker-img')">Copiar Imagem</button>
-        </div>
-        <div class="preset-box">
-          <strong>MODELS_TO_DOWNLOAD (Wan 2.1 1.3B — Teste Rápido):</strong>
-          <code id="models-13b">diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors,text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors,vae/wan_2.1_vae.safetensors</code>
-          <button type="button" onclick="copyText('models-13b')">Copiar Variável</button>
-        </div>
-      </div>
-    </section>
-  </main>
+  <audio id="ttsAudio" style="display:none;"></audio>
 
   <script>
-    let workflowsLoaded = false;
+    let scenes = [
+      {
+        speaker: "Ana",
+        voice: "pt-BR-FranciscaNeural",
+        speech_ptbr: "Você não vai acreditar no que acabou de acontecer lá na reunião.",
+        visual_prompt_en: "Candid 35mm film close-up medium shot of a Brazilian woman in her late 20s in a modern coffee shop speaking excitedly, natural mouth movement, realistic skin pores, window daylight, shallow depth of field"
+      },
+      {
+        speaker: "Lucas",
+        voice: "pt-BR-AntonioNeural",
+        speech_ptbr: "Sério? Me conta logo, o que foi que eles decidiram?",
+        visual_prompt_en: "Candid 35mm film close-up medium shot of a Brazilian man in his early 30s in a modern coffee shop leaning forward and asking curiously, realistic skin texture, warm ambient lighting, shallow depth of field"
+      }
+    ];
 
-    async function testConnection() {
-      const badge = document.getElementById("conn-badge");
-      const server = document.getElementById("server-url").value.trim();
-      badge.className = "badge running";
-      badge.textContent = "Testando...";
+    function switchTab(name, el) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      el.classList.add("active");
+      document.getElementById("tab-studio").style.display = name === "studio" ? "block" : "none";
+      document.getElementById("tab-single").style.display = name === "single" ? "block" : "none";
+    }
+
+    function renderScenes() {
+      const box = document.getElementById("scenesContainer");
+      box.innerHTML = "";
+      scenes.forEach((s, idx) => {
+        const div = document.createElement("div");
+        div.className = "scene-box";
+        div.innerHTML = `
+          <div class="scene-head">
+            <span>Cena ${idx + 1}</span>
+            <button class="danger" onclick="removeScene(${idx})">Remover</button>
+          </div>
+          <div class="grid-2" style="margin-bottom:8px;">
+            <div>
+              <label>Personagem</label>
+              <input type="text" style="width:100%" value="${escapeHtml(s.speaker)}" onchange="scenes[${idx}].speaker=this.value" />
+            </div>
+            <div>
+              <label>Voz Neural PT-BR</label>
+              <select style="width:100%" onchange="scenes[${idx}].voice=this.value">
+                <option value="pt-BR-FranciscaNeural" ${s.voice==="pt-BR-FranciscaNeural"?"selected":""}>Francisca (Feminina Natural)</option>
+                <option value="pt-BR-AntonioNeural" ${s.voice==="pt-BR-AntonioNeural"?"selected":""}>Antonio (Masculina Natural)</option>
+                <option value="pt-BR-ThalitaNeural" ${s.voice==="pt-BR-ThalitaNeural"?"selected":""}>Thalita (Feminina Jovem)</option>
+              </select>
+            </div>
+          </div>
+          <label>Fala em Português (PT-BR)</label>
+          <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <input type="text" style="flex:1" value="${escapeHtml(s.speech_ptbr)}" onchange="scenes[${idx}].speech_ptbr=this.value" />
+            <button class="secondary" onclick="previewTTS(${idx})">Ouvir Voz</button>
+          </div>
+          <label>Prompt Visual (Inglês — Wan 2.2 14B)</label>
+          <textarea rows="2" style="width:100%" onchange="scenes[${idx}].visual_prompt_en=this.value">${escapeHtml(s.visual_prompt_en)}</textarea>
+        `;
+        box.appendChild(div);
+      });
+    }
+
+    function escapeHtml(str) {
+      return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function addScene() {
+      scenes.push({
+        speaker: "Personagem",
+        voice: "pt-BR-FranciscaNeural",
+        speech_ptbr: "",
+        visual_prompt_en: "Candid 35mm film close-up medium shot, realistic skin pores, natural lighting, shallow depth of field"
+      });
+      renderScenes();
+    }
+
+    function removeScene(idx) {
+      scenes.splice(idx, 1);
+      renderScenes();
+    }
+
+    async function previewTTS(idx) {
+      const s = scenes[idx];
+      const res = await fetch("/api/tts-preview", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text: s.speech_ptbr, voice: s.voice })
+      });
+      const data = await res.json();
+      if (!data.ok) return alert("Erro TTS: " + data.error);
+      const audio = document.getElementById("ttsAudio");
+      audio.src = data.url;
+      audio.play();
+    }
+
+    async function runCopilot() {
+      const goal = document.getElementById("aiGoal").value.trim();
+      const api_key = document.getElementById("aiKey").value.trim();
+      const provider = document.getElementById("aiProvider").value;
+      const btn = document.getElementById("btnCopilot");
+      btn.disabled = true; btn.textContent = "Pensando...";
       try {
-        const res = await fetch("/api/test-connection", {
+        const res = await fetch("/api/ai-copilot", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ server })
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ goal, api_key, provider })
         });
         const data = await res.json();
-        if (data.ok) {
-          badge.className = "badge ok";
-          badge.textContent = data.vram_gb ? `${data.gpu} (${data.vram_gb} GB)` : data.gpu;
-        } else {
-          badge.className = "badge error";
-          badge.textContent = "Offline";
-          alert("Não conectou no ComfyUI: " + data.error);
+        if (!data.ok) return alert(data.error);
+        if (data.plan.title) document.getElementById("projTitle").value = data.plan.title;
+        if (Array.isArray(data.plan.scenes)) {
+          scenes = data.plan.scenes;
+          renderScenes();
         }
-      } catch (e) {
-        badge.className = "badge error";
-        badge.textContent = "Erro";
+      } finally {
+        btn.disabled = false; btn.textContent = "Gerar Roteiro";
       }
     }
 
-    async function loadWorkflowDefaults() {
-      const wf = document.getElementById("workflow-select").value;
-      if (!wf) return;
-      const res = await fetch(`/api/workflow/${encodeURIComponent(wf)}`);
-      if (!res.ok) return;
-      const d = await res.json();
-      document.getElementById("positive-prompt").value = d.positive_prompt || "";
-      document.getElementById("negative-prompt").value = d.negative_prompt || "";
-      document.getElementById("width").value = d.width || 480;
-      document.getElementById("height").value = d.height || 832;
-      document.getElementById("length").value = d.length || 33;
-      document.getElementById("steps").value = d.steps || 30;
-      document.getElementById("cfg").value = d.cfg || 6;
-    }
-
-    async function runPipeline() {
+    async function enqueueProject() {
       const payload = {
-        server: document.getElementById("server-url").value.trim(),
-        workflow: document.getElementById("workflow-select").value,
-        positive_prompt: document.getElementById("positive-prompt").value,
-        negative_prompt: document.getElementById("negative-prompt").value,
-        width: Number(document.getElementById("width").value),
-        height: Number(document.getElementById("height").value),
-        length: Number(document.getElementById("length").value),
-        steps: Number(document.getElementById("steps").value),
-        cfg: Number(document.getElementById("cfg").value),
-        seed: document.getElementById("seed").value.trim(),
-        fps: Number(document.getElementById("fps").value),
-        crf: Number(document.getElementById("crf").value),
-        audio_path: document.getElementById("audio-path").value.trim(),
-        subtitles_path: document.getElementById("subtitles-path").value.trim(),
-        nvenc: document.getElementById("nvenc").checked,
+        title: document.getElementById("projTitle").value.trim() || "projeto",
+        workflow: document.getElementById("studioWorkflow").value,
+        width: parseInt(document.getElementById("stWidth").value, 10),
+        height: parseInt(document.getElementById("stHeight").value, 10),
+        length: parseInt(document.getElementById("stLength").value, 10),
+        scenes
       };
-      const res = await fetch("/api/run", {
+      const res = await fetch("/api/queue", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {"Content-Type": "application/json"},
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (!data.ok) alert(data.error || "Falha ao iniciar.");
+      renderQueue(data.items || []);
+    }
+
+    async function deleteQueueItem(id) {
+      const res = await fetch("/api/queue/delete", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      renderQueue(data.items || []);
+    }
+
+    function renderQueue(items) {
+      document.getElementById("queueCount").textContent = `${items.length} itens`;
+      const box = document.getElementById("queueList");
+      if (!items.length) { box.innerHTML = '<div style="color:var(--muted);font-size:13px;">Nenhum projeto na fila.</div>'; return; }
+      box.innerHTML = items.map(it => `
+        <div class="queue-item">
+          <div>
+            <strong>${escapeHtml(it.title)}</strong>
+            <div style="color:var(--muted);font-size:12px;">${(it.scenes||[]).length} cenas • ${it.width}x${it.height} • ${it.workflow}</div>
+          </div>
+          <button class="danger" onclick="deleteQueueItem('${it.id}')">Excluir</button>
+        </div>
+      `).join("");
+    }
+
+    async function runQueue() {
+      const server = document.getElementById("serverUrl").value.trim();
+      const res = await fetch("/api/queue/run", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ server })
+      });
+      const data = await res.json();
+      if (!data.ok) alert(data.error);
       refreshStatus();
+    }
+
+    async function testConnection() {
+      const server = document.getElementById("serverUrl").value.trim();
+      const pill = document.getElementById("gpuStatus");
+      pill.textContent = "Testando...";
+      const res = await fetch("/api/test-connection", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ server })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        pill.className = "pill done";
+        pill.textContent = `${data.gpu} (${data.vram_gb || "?"} GB)`;
+      } else {
+        pill.className = "pill error";
+        pill.textContent = "Offline";
+      }
+    }
+
+    async function pollComfyQueue() {
+      const server = document.getElementById("serverUrl").value.trim();
+      if (!server) return;
+      try {
+        const res = await fetch("/api/comfy-queue?server=" + encodeURIComponent(server));
+        const data = await res.json();
+        const pill = document.getElementById("comfyQueuePill");
+        if (data.ok) {
+          pill.textContent = `Fila GPU: ${data.running} rodando / ${data.pending} pendente`;
+          pill.className = data.running > 0 ? "pill running" : "pill done";
+        } else {
+          pill.textContent = "Fila GPU: offline";
+          pill.className = "pill";
+        }
+      } catch {}
     }
 
     async function pullDrive() {
-      const res = await fetch("/api/pull-drive", { method: "POST" });
-      const data = await res.json();
-      if (!data.ok) alert(data.error || "Falha ao puxar do Drive.");
+      await fetch("/api/pull-drive", { method: "POST" });
       refreshStatus();
     }
 
-    function playVideo(url) {
-      const player = document.getElementById("player");
-      player.src = url;
-      player.play().catch(() => {});
-      document.getElementById("player-actions").style.display = "block";
-      document.getElementById("download-link").href = url;
+    async function loadSingleWorkflowMeta() {
+      const wf = document.getElementById("singleWorkflow").value;
+      if (!wf) return;
+      const res = await fetch("/api/workflow/" + encodeURIComponent(wf));
+      const meta = await res.json();
+      document.getElementById("sPos").value = meta.positive_prompt || "";
+      document.getElementById("sNeg").value = meta.negative_prompt || "";
+      document.getElementById("sW").value = meta.width || 720;
+      document.getElementById("sH").value = meta.height || 1280;
+      document.getElementById("sL").value = meta.length || 81;
     }
 
-    function copyText(id) {
-      navigator.clipboard.writeText(document.getElementById(id).textContent);
+    async function runSingle() {
+      const payload = {
+        server: document.getElementById("serverUrl").value.trim(),
+        workflow: document.getElementById("singleWorkflow").value,
+        positive_prompt: document.getElementById("sPos").value,
+        negative_prompt: document.getElementById("sNeg").value,
+        width: parseInt(document.getElementById("sW").value, 10),
+        height: parseInt(document.getElementById("sH").value, 10),
+        length: parseInt(document.getElementById("sL").value, 10),
+        seed: document.getElementById("sSeed").value.trim()
+      };
+      const res = await fetch("/api/run", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!data.ok) alert(data.error);
+      refreshStatus();
     }
 
+    let workflowsLoaded = false;
     async function refreshStatus() {
-      try {
-        const res = await fetch("/api/status");
-        const data = await res.json();
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      const st = document.getElementById("jobStatus");
+      st.textContent = data.status;
+      st.className = "pill " + (data.status || "");
 
-        if (!workflowsLoaded && data.workflows.length) {
-          const sel = document.getElementById("workflow-select");
-          sel.innerHTML = data.workflows.map(w => `<option value="${w}">${w}</option>`).join("");
-          workflowsLoaded = true;
-          loadWorkflowDefaults();
-        }
+      const logsBox = document.getElementById("logsBox");
+      logsBox.textContent = (data.logs || []).join("\n") || "Aguardando comandos...";
+      logsBox.scrollTop = logsBox.scrollHeight;
 
-        const badge = document.getElementById("job-badge");
-        const btnRun = document.getElementById("btn-run");
-        const btnPull = document.getElementById("btn-pull");
-        const isRunning = data.status === "running";
-        btnRun.disabled = isRunning;
-        btnPull.disabled = isRunning;
+      if (!workflowsLoaded && Array.isArray(data.workflows)) {
+        workflowsLoaded = true;
+        const opts = data.workflows.map(w => `<option value="${w}" ${w.includes("wan22")?"selected":""}>${w}</option>`).join("");
+        document.getElementById("studioWorkflow").innerHTML = opts;
+        document.getElementById("singleWorkflow").innerHTML = opts;
+        loadSingleWorkflowMeta();
+      }
 
-        if (data.status === "running") {
-          badge.className = "badge running";
-          badge.textContent = "Gerando...";
-        } else if (data.status === "done") {
-          badge.className = "badge ok";
-          badge.textContent = "Concluído";
-        } else if (data.status === "error") {
-          badge.className = "badge error";
-          badge.textContent = "Erro";
-        } else {
-          badge.className = "badge";
-          badge.textContent = "Aguardando";
-        }
-
-        if (data.logs && data.logs.length) {
-          const logsEl = document.getElementById("logs");
-          logsEl.textContent = data.logs.join("\n");
-          logsEl.scrollTop = logsEl.scrollHeight;
-        }
-
-        const listEl = document.getElementById("video-list");
-        if (data.videos && data.videos.length) {
-          listEl.innerHTML = data.videos.map(v => `
-            <div class="video-item">
-              <div>
-                <strong>${v.name}</strong><br/>
-                <small>${v.size_mb} MB</small>
-              </div>
-              <div class="row">
-                <button type="button" onclick="playVideo('${v.url}')">▶️ Ver</button>
-                <a href="${v.url}" download><button type="button">⬇️</button></a>
-              </div>
-            </div>
-          `).join("");
-          if (data.last_video && !document.getElementById("player").src) {
-            playVideo(data.last_video);
-          }
-        }
-      } catch (_) {}
+      const vBox = document.getElementById("videosList");
+      vBox.innerHTML = (data.videos || []).map(v => `
+        <div class="video-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+            <strong>${escapeHtml(v.name)}</strong>
+            <span style="color:var(--muted);">${v.size_mb} MB</span>
+          </div>
+          <video controls preload="metadata" src="${v.url}"></video>
+        </div>
+      `).join("");
     }
 
+    async function loadQueueInitial() {
+      const res = await fetch("/api/queue");
+      const data = await res.json();
+      renderQueue(data.items || []);
+    }
+
+    document.getElementById("aiKey").value = localStorage.getItem("fp_ai_key") || "";
+    renderScenes();
+    loadQueueInitial();
     refreshStatus();
-    setInterval(refreshStatus, 2000);
+    pollComfyQueue();
+    setInterval(refreshStatus, 3000);
+    setInterval(pollComfyQueue, 5000);
   </script>
 </body>
 </html>
