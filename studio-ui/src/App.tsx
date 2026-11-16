@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LibraryPanel } from './components/LibraryPanel';
 import { PreviewStage } from './components/PreviewStage';
@@ -18,7 +19,16 @@ export function App() {
   const { project } = useProjectStore();
   const [videos, setVideos] = useState<any[]>([]);
   const [uploads, setUploads] = useState<any[]>([]);
+  const [musicBank, setMusicBank] = useState<any[]>([
+    { name: 'upbeat_reels.mp3', label: 'Upbeat Reels (Dinâmico / Redes Sociais)', url: '/music-bank/upbeat_reels.mp3' },
+    { name: 'lofi_school.mp3', label: 'Lo-Fi School (Alegre / Colégio & Eventos)', url: '/music-bank/lofi_school.mp3' },
+    { name: 'corporate_clean.mp3', label: 'Corporate Clean (Institucional / Comercial)', url: '/music-bank/corporate_clean.mp3' },
+    { name: 'cinematic_warm.mp3', label: 'Cinematic Warm (Emocional / Narrativo)', url: '/music-bank/cinematic_warm.mp3' },
+  ]);
   const [jobStatus, setJobStatus] = useState('idle');
+  const [logs, setLogs] = useState<string[]>([]);
+  const [lastFinishedVideo, setLastFinishedVideo] = useState<string | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [quote, setQuote] = useState<VastQuote | null>(null);
@@ -30,6 +40,19 @@ export function App() {
       const data = await res.json();
       setJobStatus(data.status || 'idle');
       setVideos(data.videos || []);
+      if (Array.isArray(data.music_bank) && data.music_bank.length > 0) {
+        setMusicBank(data.music_bank);
+      }
+      setLogs(data.logs || []);
+      if (data.status === 'running') setLogsOpen(true);
+      if (data.status === 'done' && data.last_video) {
+        setLastFinishedVideo((prev) => {
+          if (prev !== data.last_video) {
+            setPreviewVideoUrl(data.last_video);
+          }
+          return data.last_video;
+        });
+      }
     } catch {
       // Backend offline
     }
@@ -78,10 +101,11 @@ export function App() {
   }
 
   async function handleLocalRender() {
+    const currentProject = useProjectStore.getState().project;
     const res = await fetch('/api/local/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(project),
+      body: JSON.stringify(currentProject),
     });
     const data = await res.json();
     setToast(data.ok ? 'Renderização local (FFmpeg) iniciada!' : `Erro: ${data.error}`);
@@ -135,6 +159,7 @@ export function App() {
         <LibraryPanel
           videos={videos}
           uploads={uploads}
+          lastFinishedVideo={lastFinishedVideo}
           onRefreshUploads={refreshUploads}
           onSelectPreviewVideo={(url) => setPreviewVideoUrl(url)}
           onEnqueue={handleEnqueue}
@@ -142,7 +167,25 @@ export function App() {
           onLocalRender={handleLocalRender}
         />
         <PreviewStage previewVideoUrl={previewVideoUrl} onClearPreviewVideo={() => setPreviewVideoUrl(null)} />
-        <PropertiesPanel />
+        <PropertiesPanel musicBank={musicBank} uploads={uploads} />
+      </div>
+
+      <div className="bg-[#0b0f17] border-t border-[#1e2738] shrink-0">
+        <button
+          onClick={() => setLogsOpen(!logsOpen)}
+          className="w-full px-3 py-1 flex items-center justify-between text-[11px] text-slate-400 hover:text-slate-200 cursor-pointer"
+        >
+          <span className="flex items-center gap-1.5 font-medium">
+            <Terminal className="w-3.5 h-3.5 text-blue-400" />
+            Console ao Vivo ({logs.length} linhas) • Status: <strong className="text-blue-300">{jobStatus}</strong>
+          </span>
+          {logsOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+        </button>
+        {logsOpen && (
+          <div className="h-28 overflow-y-auto px-3 pb-2 font-mono text-[11px] text-slate-300 bg-[#070a10] whitespace-pre-wrap">
+            {logs.length ? logs.join('\n') : 'Aguardando execução...'}
+          </div>
+        )}
       </div>
 
       <Timeline />

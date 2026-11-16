@@ -327,6 +327,8 @@ class AdminHandler(BaseHTTPRequestHandler):
             snap = JOBS.snapshot()
             snap["workflows"] = list_workflows()
             snap["videos"] = list_final_videos()
+            snap["music_bank"] = studio_api.list_music_bank()
+            snap["voices"] = studio_api.VOICE_CATALOG
             self.send_json(snap)
             return
 
@@ -347,6 +349,24 @@ class AdminHandler(BaseHTTPRequestHandler):
 
         if path == "/api/uploads":
             self.send_json({"items": studio_api.list_uploads()})
+            return
+
+        if path == "/api/music-bank":
+            self.send_json({"items": studio_api.list_music_bank(), "voices": studio_api.VOICE_CATALOG})
+            return
+
+        if path.startswith("/music-bank/"):
+            filename = unquote(path[len("/music-bank/"):])
+            file_path = (studio_api.MUSIC_BANK_DIR / filename).resolve()
+            if file_path.parent != studio_api.MUSIC_BANK_DIR.resolve() or not file_path.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND, "Music track not found")
+                return
+            data = file_path.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
             return
 
         if path.startswith("/uploads/"):

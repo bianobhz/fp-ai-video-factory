@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AspectFormat, SceneItem, StudioProject } from '../types/project';
+import type { AspectFormat, SceneItem, StudioFrontMode, StudioProject } from '../types/project';
 
 interface ProjectState {
   project: StudioProject;
@@ -7,6 +7,7 @@ interface ProjectState {
   currentTime: number;
   isPlaying: boolean;
   setProjectTitle: (title: string) => void;
+  setMode: (mode: StudioFrontMode) => void;
   setFormat: (format: AspectFormat) => void;
   setWorkflow: (workflow: string) => void;
   setSubtitlesEnabled: (enabled: boolean) => void;
@@ -75,10 +76,12 @@ export const useProjectStore = create<ProjectState>((set) => ({
     version: '1.0',
     id: 'proj-default',
     title: 'dialogo_cafe_comercial',
+    mode: 'social_ia',
     format: '9:16',
     fps: 30,
     workflow: 'wan22_t2v_14b_vertical_api.json',
-    musicVolume: 0.25,
+    musicUrl: '/music-bank/upbeat_reels.mp3',
+    musicVolume: 0.30,
     subtitlesEnabled: true,
     scenes: initialScenes,
   },
@@ -87,6 +90,23 @@ export const useProjectStore = create<ProjectState>((set) => ({
   isPlaying: false,
 
   setProjectTitle: (title) => set((s) => ({ project: { ...s.project, title } })),
+  setMode: (mode) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        mode,
+        workflow:
+          mode === 'commercial_i2v'
+            ? 'wan21_i2v_14b_vertical_api.json'
+            : 'wan22_t2v_14b_vertical_api.json',
+        musicUrl:
+          mode === 'school_local'
+            ? '/music-bank/lofi_school.mp3'
+            : mode === 'commercial_i2v'
+            ? '/music-bank/corporate_clean.mp3'
+            : '/music-bank/upbeat_reels.mp3',
+      },
+    })),
   setFormat: (format) => set((s) => ({ project: { ...s.project, format } })),
   setWorkflow: (workflow) => set((s) => ({ project: { ...s.project, workflow } })),
   setSubtitlesEnabled: (subtitlesEnabled) => set((s) => ({ project: { ...s.project, subtitlesEnabled } })),
@@ -110,8 +130,11 @@ export const useProjectStore = create<ProjectState>((set) => ({
         transition: partial?.transition || 'cut',
         volume: partial?.volume ?? 1,
         subtitleText: partial?.subtitleText || partial?.speechPtBr || '',
+        mediaType: partial?.mediaType,
+        mediaUrl: partial?.mediaUrl,
+        referenceImageUrl: partial?.referenceImageUrl,
         lipSyncEnabled: partial?.lipSyncEnabled ?? true,
-        status: 'draft',
+        status: partial?.status || 'draft',
       };
       return {
         project: { ...s.project, scenes: [...s.project.scenes, newScene] },

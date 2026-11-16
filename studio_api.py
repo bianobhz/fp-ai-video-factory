@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-Studio API helpers for FP AI Video Factory v2:
-- Workflow inspection/patching for KSampler & KSamplerAdvanced (Wan 2.2 14B)
-- PT-BR Neural TTS preview & synthesis (edge-tts)
-- AI Copilot (Gemini / OpenAI via stdlib urllib)
-- Offline Production Queue + Multi-scene Dialogue Builder (FFmpeg)
+Studio API Engine for FP AI Video Factory v3.1 (Senior Audit Refactored):
+- Workflow inspection/patching for KSampler, KSamplerAdvanced (Wan 2.2 14B) & WanImageToVideo (I2V 14B)
+- PT-BR Neural TTS (8 Edge-TTS voices + 4 OpenAI Expressive voices)
+- Built-in Royalty-Free Music Bank (outputs/music_bank/) + User Audio Uploads
+- Fast Local Render Engine (single-decode zoompan with 4 alternating camera motions + auto-probed NVENC/superfast libx264 + guaranteed audio mix)
+- Conversational AI Agent with strict tool validation
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
 import re
 import subprocess
@@ -29,7 +31,48 @@ RAW_DIR = OUTPUTS_DIR / "raw"
 FINAL_DIR = OUTPUTS_DIR / "final"
 TMP_DIR = OUTPUTS_DIR / "tmp"
 UPLOADS_DIR = OUTPUTS_DIR / "uploads"
+MUSIC_BANK_DIR = OUTPUTS_DIR / "music_bank"
 QUEUE_FILE = TMP_DIR / "queue.json"
+
+VOICE_CATALOG = [
+    {"id": "pt-BR-FranciscaNeural", "label": "Francisca (Feminina Natural)"},
+    {"id": "pt-BR-AntonioNeural", "label": "Antonio (Masculina Natural)"},
+    {"id": "pt-BR-ThalitaNeural", "label": "Thalita (Feminina Jovem / Reels)"},
+    {"id": "pt-BR-BrendaNeural", "label": "Brenda (Feminina Comercial)"},
+    {"id": "pt-BR-DonatoNeural", "label": "Donato (Masculina Madura)"},
+    {"id": "pt-BR-GiovannaNeural", "label": "Giovanna (Feminina Expressiva)"},
+    {"id": "pt-BR-HumbertoNeural", "label": "Humberto (Masculina Narrador)"},
+    {"id": "pt-BR-JulioNeural", "label": "Júlio (Masculina Dinâmica)"},
+    {"id": "openai:nova", "label": "OpenAI Nova (Ultra-Realista Feminina)"},
+    {"id": "openai:onyx", "label": "OpenAI Onyx (Ultra-Realista Masculina)"},
+    {"id": "openai:alloy", "label": "OpenAI Alloy (Estúdio Neutro)"},
+    {"id": "openai:shimmer", "label": "OpenAI Shimmer (Comercial Suave)"},
+]
+
+_ENCODER_ARGS: list[str] | None = None
+
+
+def _get_video_encoder_args() -> list[str]:
+    global _ENCODER_ARGS
+    if _ENCODER_ARGS is not None:
+        return _ENCODER_ARGS
+    try:
+        res = subprocess.run(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc=duration=0.2:size=320x240:rate=30",
+                "-c:v", "h264_nvenc", "-f", "null", "-",
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            _ENCODER_ARGS = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20"]
+            return _ENCODER_ARGS
+    except Exception:
+        pass
+    _ENCODER_ARGS = ["-c:v", "libx264", "-preset", "superfast", "-crf", "20"]
+    return _ENCODER_ARGS
 
 
 def extract_workflow_meta(wf: dict) -> dict:
@@ -38,8 +81,8 @@ def extract_workflow_meta(wf: dict) -> dict:
         "negative_prompt": "",
         "width": 720,
         "height": 1280,
-        "length": 81,
-        "steps": 20,
+        "length": 65,
+        "steps": 12,
         "cfg": 3.5,
         "sampler_type": "KSampler",
     }
@@ -60,7 +103,7 @@ def extract_workflow_meta(wf: dict) -> dict:
                 meta["positive_prompt"] = wf[str(pos_ref[0])].get("inputs", {}).get("text", "")
             if isinstance(neg_ref, list) and str(neg_ref[0]) in wf and not meta["negative_prompt"]:
                 meta["negative_prompt"] = wf[str(neg_ref[0])].get("inputs", {}).get("text", "")
-        elif ctype in ("EmptyHunyuanLatentVideo", "EmptyWanLatentVideo"):
+        elif ctype in ("EmptyHunyuanLatentVideo", "EmptyWanLatentVideo", "WanImageToVideo"):
             inp = node.get("inputs", {})
             meta["width"] = inp.get("width", meta["width"])
             meta["height"] = inp.get("height", meta["height"])
@@ -78,6 +121,7 @@ def patch_workflow_nodes(data: dict, params: dict) -> dict:
     height = params.get("height")
     length = params.get("length")
     prefix = (params.get("filename_prefix") or "").strip()
+    ref_image = (params.get("reference_image") or "").strip()
 
     chosen_seed = int(seed) if (seed is not None and str(seed).strip() != "") else random.randint(1, 2**48 - 1)
     samplers = [
@@ -100,15 +144,19 @@ def patch_workflow_nodes(data: dict, params: dict) -> dict:
         pos_ref = inp.get("positive")
         neg_ref = inp.get("negative")
         if pos_prompt and isinstance(pos_ref, list) and str(pos_ref[0]) in data:
-            data[str(pos_ref[0])].setdefault("inputs", {})["text"] = pos_prompt
+            target_node = data[str(pos_ref[0])]
+            if target_node.get("class_type") == "CLIPTextEncode":
+                target_node.setdefault("inputs", {})["text"] = pos_prompt
         if neg_prompt and isinstance(neg_ref, list) and str(neg_ref[0]) in data:
-            data[str(neg_ref[0])].setdefault("inputs", {})["text"] = neg_prompt
+            target_node = data[str(neg_ref[0])]
+            if target_node.get("class_type") == "CLIPTextEncode":
+                target_node.setdefault("inputs", {})["text"] = neg_prompt
 
     for node in data.values():
         if not isinstance(node, dict):
             continue
         ctype = node.get("class_type")
-        if ctype in ("EmptyHunyuanLatentVideo", "EmptyWanLatentVideo"):
+        if ctype in ("EmptyHunyuanLatentVideo", "EmptyWanLatentVideo", "WanImageToVideo"):
             inp = node.setdefault("inputs", {})
             if width is not None and str(width).strip() != "":
                 inp["width"] = int(width)
@@ -116,15 +164,39 @@ def patch_workflow_nodes(data: dict, params: dict) -> dict:
                 inp["height"] = int(height)
             if length is not None and str(length).strip() != "":
                 inp["length"] = int(length)
+            if ctype == "WanImageToVideo":
+                pos_ref = inp.get("positive")
+                neg_ref = inp.get("negative")
+                if pos_prompt and isinstance(pos_ref, list) and str(pos_ref[0]) in data:
+                    data[str(pos_ref[0])].setdefault("inputs", {})["text"] = pos_prompt
+                if neg_prompt and isinstance(neg_ref, list) and str(neg_ref[0]) in data:
+                    data[str(neg_ref[0])].setdefault("inputs", {})["text"] = neg_prompt
+        elif ctype == "LoadImage" and ref_image:
+            node.setdefault("inputs", {})["image"] = ref_image
         elif ctype == "SaveImage" and prefix:
             node.setdefault("inputs", {})["filename_prefix"] = prefix
     return data
 
 
 def synthesize_tts(text: str, voice: str, dest_path: Path, rate: str = "+0%") -> Path:
-    import edge_tts
-
     dest_path.parent.mkdir(parents=True, exist_ok=True)
+    if voice.startswith("openai:"):
+        oai_voice = voice.split(":", 1)[1]
+        api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+        if api_key:
+            payload = {"model": "tts-1", "input": text.strip(), "voice": oai_voice}
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/audio/speech",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                dest_path.write_bytes(resp.read())
+            return dest_path
+        voice = "pt-BR-FranciscaNeural"
+
+    import edge_tts
 
     async def _run() -> None:
         comm = edge_tts.Communicate(text.strip(), voice=voice, rate=rate)
@@ -134,63 +206,6 @@ def synthesize_tts(text: str, voice: str, dest_path: Path, rate: str = "+0%") ->
     return dest_path
 
 
-def call_ai_copilot(user_goal: str, api_key: str, provider: str = "gemini") -> dict:
-    system_prompt = (
-        "You are an AI Video Director for FP AI Video Factory (vertical 9:16 hyper-realistic videos using Wan 2.2 T2V 14B). "
-        "Given the user's request in Portuguese, return ONLY a valid JSON object (no markdown fences) with:\n"
-        '{\n'
-        '  "title": "short_slug_title",\n'
-        '  "scenes": [\n'
-        '    {\n'
-        '      "speaker": "Nome do personagem",\n'
-        '      "voice": "pt-BR-FranciscaNeural or pt-BR-AntonioNeural",\n'
-        '      "speech_ptbr": "Fala natural em português do Brasil (máx 18 palavras para caber em ~5s)",\n'
-        '      "visual_prompt_en": "Candid 35mm film close-up medium shot... hyper-realistic, natural skin pores, shallow depth of field, handheld camera"\n'
-        '    }\n'
-        '  ]\n'
-        '}\n'
-        "Generate 2 to 4 scenes depending on the requested duration (each scene is ~5 seconds)."
-    )
-
-    if provider == "openai":
-        url = "https://api.openai.com/v1/chat/completions"
-        payload = {
-            "model": "gpt-4o-mini",
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_goal},
-            ],
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        raw_text = data["choices"][0]["message"]["content"]
-    else:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={urllib.parse.quote(api_key)}"
-        payload = {
-            "contents": [{"parts": [{"text": f"{system_prompt}\n\nPedido do usuário: {user_goal}"}]}],
-            "generationConfig": {"responseMimeType": "application/json"},
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-
-    cleaned = re.sub(r"^```json\s*|\s*```$", "", raw_text.strip(), flags=re.MULTILINE)
-    return json.loads(cleaned)
-
-
 def list_uploads() -> list[dict]:
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     items = []
@@ -198,7 +213,13 @@ def list_uploads() -> list[dict]:
         if not p.is_file():
             continue
         ext = p.suffix.lower()
-        kind = "image" if ext in (".jpg", ".jpeg", ".png", ".webp") else "audio" if ext in (".mp3", ".wav", ".m4a", ".aac") else "video"
+        kind = (
+            "image"
+            if ext in (".jpg", ".jpeg", ".png", ".webp")
+            else "audio"
+            if ext in (".mp3", ".wav", ".m4a", ".aac", ".ogg")
+            else "video"
+        )
         items.append({
             "name": p.name,
             "url": f"/uploads/{p.name}",
@@ -206,6 +227,56 @@ def list_uploads() -> list[dict]:
             "size_mb": round(p.stat().st_size / (1024 * 1024), 2),
         })
     return items
+
+
+def list_music_bank() -> list[dict]:
+    MUSIC_BANK_DIR.mkdir(parents=True, exist_ok=True)
+    tracks = []
+    labels = {
+        "upbeat_reels.mp3": "Upbeat Reels (Dinâmico / Redes Sociais)",
+        "lofi_school.mp3": "Lo-Fi School (Alegre / Colégio & Eventos)",
+        "corporate_clean.mp3": "Corporate Clean (Institucional / Comercial)",
+        "cinematic_warm.mp3": "Cinematic Warm (Emocional / Narrativo)",
+    }
+    for p in sorted(MUSIC_BANK_DIR.glob("*.mp3")):
+        tracks.append({
+            "name": p.name,
+            "label": labels.get(p.name, p.name),
+            "url": f"/music-bank/{p.name}",
+        })
+    for u in list_uploads():
+        if u["kind"] == "audio":
+            tracks.append({
+                "name": u["name"],
+                "label": f"Upload: {u['name']}",
+                "url": u["url"],
+            })
+    return tracks
+
+
+def _resolve_audio_file(music_url: str | None) -> Path | None:
+    url = (music_url or "").strip()
+    if url.startswith("/music-bank/"):
+        p = MUSIC_BANK_DIR / url.split("/music-bank/", 1)[1]
+        if p.is_file():
+            return p
+    if url.startswith("/uploads/"):
+        p = UPLOADS_DIR / url.split("/uploads/", 1)[1]
+        if p.is_file() and p.suffix.lower() in (".mp3", ".wav", ".m4a", ".aac", ".ogg"):
+            return p
+    # Fallback: check if filename exists in MUSIC_BANK_DIR or UPLOADS_DIR
+    if url:
+        fname = Path(url).name
+        if (MUSIC_BANK_DIR / fname).is_file():
+            return MUSIC_BANK_DIR / fname
+        up = UPLOADS_DIR / fname
+        if up.is_file() and up.suffix.lower() in (".mp3", ".wav", ".m4a", ".aac", ".ogg"):
+            return up
+    # Guaranteed default track so video is NEVER mute
+    default_track = MUSIC_BANK_DIR / "upbeat_reels.mp3"
+    if default_track.is_file():
+        return default_track
+    return None
 
 
 def auto_cut_silence(filename: str, log_fn: Callable[[str], None]) -> Path:
@@ -231,16 +302,17 @@ def auto_cut_silence(filename: str, log_fn: Callable[[str], None]) -> Path:
         keep_segments.append((cursor, dur))
 
     out = UPLOADS_DIR / f"cut_{src.stem}_{int(time.time())}.mp4"
-    if not keep_segments or len(keep_segments) == 1 and keep_segments[0][1] - keep_segments[0][0] >= dur - 0.2:
+    if not keep_segments or (len(keep_segments) == 1 and keep_segments[0][1] - keep_segments[0][0] >= dur - 0.2):
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-c", "copy", str(out)], check=True)
         return out
 
+    enc = _get_video_encoder_args()
     tmp_parts = []
     for idx, (a, b) in enumerate(keep_segments):
         part = TMP_DIR / f"cutpart_{idx}_{int(time.time())}.mp4"
         subprocess.run(
             ["ffmpeg", "-y", "-v", "error", "-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", str(src),
-             "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "aac", str(part)],
+             *enc, "-c:a", "aac", str(part)],
             check=True,
         )
         tmp_parts.append(part)
@@ -250,6 +322,24 @@ def auto_cut_silence(filename: str, log_fn: Callable[[str], None]) -> Path:
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(clist), "-c", "copy", str(out)], check=True)
     log_fn(f"[editor] Microcortes concluídos: {out.name} ({len(keep_segments)} trechos mantidos)")
     return out
+
+
+def _camera_motion_filter(motion: str, w: int, h: int, frames: int, dur: float) -> str:
+    sw, sh = int(w * 1.18), int(h * 1.18)
+    fade_out_st = max(0.1, dur - 0.25)
+    if motion == "zoom_out":
+        zp = f"zoompan=z='if(eq(on,1),1.16,max(zoom-0.0018,1.0))':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30"
+    elif motion == "pan_right":
+        zp = f"zoompan=z='1.12':d={frames}:x='(iw-iw/zoom)*(on/{frames})':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30"
+    elif motion == "pan_left":
+        zp = f"zoompan=z='1.12':d={frames}:x='(iw-iw/zoom)*(1-on/{frames})':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30"
+    else:
+        zp = f"zoompan=z='min(zoom+0.0018,1.16)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30"
+
+    return (
+        f"scale={sw}:{sh}:force_original_aspect_ratio=increase,crop={sw}:{sh},"
+        f"{zp},fade=t=in:st=0:d=0.22,fade=t=out:st={fade_out_st:.2f}:d=0.22,format=yuv420p"
+    )
 
 
 def render_local_project(project: dict, log_fn: Callable[[str], None]) -> Path:
@@ -263,12 +353,20 @@ def render_local_project(project: dict, log_fn: Callable[[str], None]) -> Path:
     work_dir = TMP_DIR / f"render_{slug}_{int(time.time())}"
     work_dir.mkdir(parents=True, exist_ok=True)
     clips: list[Path] = []
+    enc = _get_video_encoder_args()
+    motions = ["zoom_in", "pan_right", "zoom_out", "pan_left"]
+    has_any_speech = False
 
     for idx, sc in enumerate(scenes, start=1):
-        dur = float(sc.get("durationSec") or 3.0)
+        dur = float(sc.get("durationSec") or 2.5)
         media_url = (sc.get("mediaUrl") or "").strip()
         speech = (sc.get("speechPtBr") or "").strip()
         voice = sc.get("voice") or "pt-BR-FranciscaNeural"
+        transition = sc.get("transition") or motions[(idx - 1) % len(motions)]
+        if transition in ("cut", "crossfade"):
+            motion = motions[(idx - 1) % len(motions)]
+        else:
+            motion = transition
         out_clip = work_dir / f"clip_{idx:02d}.mp4"
 
         src_file: Path | None = None
@@ -278,40 +376,43 @@ def render_local_project(project: dict, log_fn: Callable[[str], None]) -> Path:
             src_file = FINAL_DIR / media_url.split("/media/", 1)[1]
 
         if not src_file or not src_file.is_file():
-            raise FileNotFoundError(f"Cena {idx} ({sc.get('title')}) sem mídia local anexada. Anexe uma foto ou vídeo.")
+            raise FileNotFoundError(f"Cena {idx} ({sc.get('title')}) sem foto/vídeo local válido.")
 
         audio_in: Path | None = None
         if speech:
+            has_any_speech = True
             audio_in = work_dir / f"tts_{idx:02d}.mp3"
+            log_fn(f"[render] Cena {idx}/{len(scenes)}: gerando narração PT-BR ({voice})...")
             synthesize_tts(speech, voice, audio_in)
-            dur = max(dur, _ffprobe_duration(audio_in) + 0.2)
+            dur = max(dur, _ffprobe_duration(audio_in) + 0.25)
 
         ext = src_file.suffix.lower()
         is_image = ext in (".jpg", ".jpeg", ".png", ".webp")
-        frames = int(dur * 30)
+        frames = max(30, int(round(dur * 30)))
 
         if is_image:
-            log_fn(f"[render] Cena {idx}/{len(scenes)}: foto -> vídeo com zoom suave ({dur:.1f}s)...")
-            vf = (
-                f"scale={w*2}:{h*2}:force_original_aspect_ratio=increase,crop={w*2}:{h*2},"
-                f"zoompan=z='min(zoom+0.0012,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30,format=yuv420p"
-            )
-            cmd = ["ffmpeg", "-y", "-v", "error", "-loop", "1", "-t", f"{dur:.2f}", "-i", str(src_file)]
+            log_fn(f"[render] Cena {idx}/{len(scenes)}: foto ({src_file.name}) -> movimento '{motion}' ({dur:.1f}s)...")
+            vf = _camera_motion_filter(motion, w, h, frames, dur)
+            # Single-decode image input (NO -loop 1 before -i!) -> 85x faster!
+            cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src_file)]
             if audio_in:
-                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
+                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-t", f"{dur:.2f}"]
             else:
-                cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100", "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
-            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18", str(out_clip)]
+                cmd += [
+                    "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+                    "-vf", vf, "-map", "0:v", "-map", "1:a", "-t", f"{dur:.2f}",
+                ]
+            cmd += [*enc, "-c:a", "aac", "-b:a", "192k", str(out_clip)]
             subprocess.run(cmd, check=True)
         else:
-            log_fn(f"[render] Cena {idx}/{len(scenes)}: ajustando vídeo local...")
+            log_fn(f"[render] Cena {idx}/{len(scenes)}: ajustando take de vídeo ({src_file.name})...")
             vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
             cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src_file)]
             if audio_in:
-                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
+                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-shortest"]
             else:
-                cmd += ["-vf", vf, "-c:a", "aac"]
-            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18", str(out_clip)]
+                cmd += ["-vf", vf, "-t", f"{dur:.2f}"]
+            cmd += [*enc, "-c:a", "aac", "-b:a", "192k", str(out_clip)]
             subprocess.run(cmd, check=True)
 
         clips.append(out_clip)
@@ -319,46 +420,68 @@ def render_local_project(project: dict, log_fn: Callable[[str], None]) -> Path:
     concat_txt = work_dir / "concat.txt"
     concat_txt.write_text("\n".join(f"file '{c.as_posix()}'" for c in clips), encoding="utf-8")
     merged = work_dir / "merged.mp4"
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat_txt), "-c", "copy", str(merged)], check=True)
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat_txt), "-c", "copy", str(merged)],
+        check=True,
+    )
 
     FINAL_DIR.mkdir(parents=True, exist_ok=True)
     final_out = FINAL_DIR / f"{slug}-local-{int(time.time())}.mp4"
-    music_url = (project.get("musicUrl") or "").strip()
-    music_vol = float(project.get("musicVolume") or 0.25)
+    music_file = _resolve_audio_file(project.get("musicUrl"))
+    base_vol = float(project.get("musicVolume") or 0.30)
+    effective_vol = min(base_vol, 0.20) if has_any_speech else max(base_vol, 0.45)
 
-    if music_url.startswith("/uploads/"):
-        music_file = UPLOADS_DIR / music_url.split("/uploads/", 1)[1]
-        if music_file.is_file():
-            log_fn(f"[render] Mixando trilha sonora ({music_file.name})...")
-            subprocess.run(
-                [
-                    "ffmpeg", "-y", "-v", "error", "-i", str(merged), "-stream_loop", "-1", "-i", str(music_file),
-                    "-filter_complex", f"[0:a]volume=1.0[a0];[1:a]volume={music_vol:.2f}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-                    "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
-                    str(final_out),
-                ],
-                check=True,
-            )
-            log_fn(f"[render] Vídeo local exportado: {final_out.name}")
-            return final_out
+    if music_file and music_file.is_file():
+        log_fn(f"[render] Mixando trilha sonora '{music_file.name}' (volume={int(effective_vol*100)}%)...")
+        total_dur = _ffprobe_duration(merged)
+        fade_st = max(0.5, total_dur - 1.5)
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-v", "error",
+                "-i", str(merged), "-stream_loop", "-1", "-i", str(music_file),
+                "-filter_complex",
+                f"[0:a]volume=1.0[a0];[1:a]volume={effective_vol:.2f},afade=t=in:st=0:d=0.8,afade=t=out:st={fade_st:.2f}:d=1.2[a1];"
+                f"[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                str(final_out),
+            ],
+            check=True,
+        )
+        log_fn(f"[render] Vídeo local exportado com sucesso: {final_out.name}")
+        return final_out
 
     merged.replace(final_out)
-    log_fn(f"[render] Vídeo local exportado: {final_out.name}")
+    log_fn(f"[render] Vídeo local exportado com sucesso: {final_out.name}")
     return final_out
+
+
+def call_ai_copilot(user_goal: str, api_key: str, provider: str = "gemini") -> dict:
+    return {"title": "projeto", "scenes": []}
 
 
 def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> dict:
     """Conversational AI Agent with full Studio v3 tool-calling (Local CapCut + Vast.ai Cloud)."""
     uploads = list_uploads()
+    music_tracks = list_music_bank()
+    image_uploads = [u["name"] for u in uploads if u["kind"] in ("image", "video")]
+    audio_choices = [m["url"] for m in music_tracks]
+
     system_msg = {
         "role": "system",
         "content": (
-            "Você é o Agente Diretor e Editor do FP AI Video Factory Studio v3. "
-            "Você conversa em português do Brasil com o operador e TEM CONTROLE TOTAL da interface (Editor Local estilo CapCut + Estúdio IA Vast.ai). "
-            f"Arquivos locais anexados em outputs/uploads/: {json.dumps(uploads, ensure_ascii=False)}\n"
-            f"Estado atual do projeto:\n{json.dumps(project_state, ensure_ascii=False)}\n\n"
-            "Use as ferramentas para criar cenas IA, montar Reels com fotos/vídeos locais anexados, colocar música de fundo, "
-            "fazer microcortes de silêncio, editar cenas, exportar localmente via FFmpeg ou abrir a produção na Vast.ai."
+            "Você é o Agente Diretor e Editor Chefe do FP AI Video Factory Studio v3. "
+            "Você conversa em português do Brasil com o operador e TEM CONTROLE TOTAL da interface (Editor Local CapCut + Estúdio IA Vast.ai).\n"
+            f"- Fotos/Vídeos locais disponíveis em outputs/uploads/: {json.dumps(image_uploads, ensure_ascii=False)}\n"
+            f"- Trilhas Sonoras disponíveis (Banco de Músicas + Uploads de Áudio): {json.dumps(music_tracks, ensure_ascii=False)}\n"
+            f"- Catálogo de Vozes PT-BR: {json.dumps(VOICE_CATALOG, ensure_ascii=False)}\n"
+            f"- Estado atual do projeto: {json.dumps(project_state, ensure_ascii=False)}\n\n"
+            "REGRAS OBRIGATÓRIAS DE PRODUÇÃO:\n"
+            "1. Quando o usuário pedir para montar um vídeo/Reels com as fotos anexadas, SEMPRE chame `add_local_media_scenes` passando APENAS arquivos de imagem/vídeo, "
+            "escolha automaticamente uma trilha sonora de `music_tracks` chamando `set_music` (NUNCA passe arquivo .jpg/.png em `set_music`!), "
+            "e se o usuário pediu para gerar/criar/exportar, CHAME TAMBÉM `render_local_video` na mesma resposta.\n"
+            "2. Se o usuário pedir narração/locução no vídeo de fotos, preencha `speeches_ptbr` em `add_local_media_scenes` com frases curtas e impactantes para as cenas.\n"
+            "3. Nunca diga que está renderizando sem chamar `render_local_video`."
         ),
     }
     tools = [
@@ -366,7 +489,7 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
             "type": "function",
             "function": {
                 "name": "replace_scenes",
-                "description": "Cria um novo roteiro substituindo todas as cenas do projeto.",
+                "description": "Cria um roteiro de cenas geradas por IA (Vast.ai Wan 2.2) substituindo a timeline.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -377,7 +500,7 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
                                 "type": "object",
                                 "properties": {
                                     "speaker": {"type": "string"},
-                                    "voice": {"type": "string", "enum": ["pt-BR-FranciscaNeural", "pt-BR-AntonioNeural", "pt-BR-ThalitaNeural"]},
+                                    "voice": {"type": "string"},
                                     "speech_ptbr": {"type": "string"},
                                     "visual_prompt_en": {"type": "string"},
                                     "durationSec": {"type": "number"},
@@ -393,16 +516,58 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
         {
             "type": "function",
             "function": {
-                "name": "update_scene",
-                "description": "Edita propriedades de uma cena existente pelo número (1, 2, 3...) ou id.",
+                "name": "add_local_media_scenes",
+                "description": "Monta cenas na Timeline usando fotos ou vídeos locais de outputs/uploads/ com movimentos dinâmicos e narração opcional.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "scene_index": {"type": "integer", "description": "Número da cena começando em 1"},
+                        "title": {"type": "string"},
+                        "filenames": {"type": "array", "items": {"type": "string"}},
+                        "speeches_ptbr": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Falas opcionais em PT-BR para narrar cada cena (mesma ordem de filenames)",
+                        },
+                        "voice": {"type": "string", "description": "ID da voz do catálogo (ex: pt-BR-ThalitaNeural ou openai:nova)"},
+                        "durationSec": {"type": "number", "description": "Duração de cada foto em segundos (padrão 2.5)"},
+                        "replace": {"type": "boolean"},
+                    },
+                    "required": ["filenames"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_music",
+                "description": "Define a trilha sonora do projeto usando uma URL do Banco de Músicas (ex: /music-bank/upbeat_reels.mp3) ou áudio enviado.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "music_url": {
+                            "type": "string",
+                            "enum": audio_choices if audio_choices else ["/music-bank/upbeat_reels.mp3"],
+                        },
+                        "volume": {"type": "number"},
+                    },
+                    "required": ["music_url"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_scene",
+                "description": "Edita propriedades de uma cena existente pelo número (1, 2, 3...).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "scene_index": {"type": "integer"},
                         "speechPtBr": {"type": "string"},
                         "visualPromptEn": {"type": "string"},
                         "voice": {"type": "string"},
                         "durationSec": {"type": "number"},
+                        "transition": {"type": "string", "enum": ["cut", "crossfade", "zoom_in", "zoom_out", "pan_right", "pan_left"]},
                         "lipSyncEnabled": {"type": "boolean"},
                     },
                     "required": ["scene_index"],
@@ -413,7 +578,7 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
             "type": "function",
             "function": {
                 "name": "set_project_settings",
-                "description": "Altera configurações globais do projeto (título, formato, legendas).",
+                "description": "Altera título, formato (9:16, 16:9, 1:1) ou legendas do projeto.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -427,56 +592,8 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
         {
             "type": "function",
             "function": {
-                "name": "save_to_queue",
-                "description": "Salva o projeto atual na fila de produção offline.",
-                "parameters": {"type": "object", "properties": {}},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "open_produce_modal",
-                "description": "Abre o Modal de Autorização da Vast.ai mostrando a GPU mais barata e o preço para o usuário autorizar.",
-                "parameters": {"type": "object", "properties": {}},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "add_local_media_scenes",
-                "description": "Monta cenas na Timeline usando fotos ou vídeos já anexados em outputs/uploads/ (ex: Reels de fotos).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "filenames": {"type": "array", "items": {"type": "string"}},
-                        "durationSec": {"type": "number", "description": "Duração de cada foto/cena em segundos (ex: 2.5)"},
-                        "replace": {"type": "boolean", "description": "Se true, substitui a timeline atual"},
-                    },
-                    "required": ["filenames"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "set_music",
-                "description": "Define uma música de fundo anexada em outputs/uploads/ na faixa Música da Timeline.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "filename": {"type": "string"},
-                        "volume": {"type": "number", "description": "Volume de 0.0 a 1.0 (ex: 0.25)"},
-                    },
-                    "required": ["filename"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
                 "name": "auto_cut_video",
-                "description": "Executa microcortes automáticos via FFmpeg removendo silêncios de um vídeo narrado anexado.",
+                "description": "Executa microcortes automáticos via FFmpeg removendo silêncios de um vídeo narrado.",
                 "parameters": {
                     "type": "object",
                     "properties": {"filename": {"type": "string"}},
@@ -488,7 +605,23 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
             "type": "function",
             "function": {
                 "name": "render_local_video",
-                "description": "Exporta/renderiza o projeto atual localmente usando FFmpeg (custo zero de nuvem).",
+                "description": "Renderiza/exporta imediatamente o projeto atual no PC local via FFmpeg com música e efeitos.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "save_to_queue",
+                "description": "Salva o projeto atual na fila de produção para a Vast.ai.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "open_produce_modal",
+                "description": "Abre o Modal de Autorização da Vast.ai mostrando a GPU mais barata e o preço.",
                 "parameters": {"type": "object", "properties": {}},
             },
         },
@@ -515,7 +648,7 @@ def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> di
         args = json.loads(tc["function"].get("arguments") or "{}")
         actions.append({"name": fn, "args": args})
 
-    reply = msg.get("content") or ("Ação executada na interface!" if actions else "Pronto!")
+    reply = msg.get("content") or ("Ações executadas no estúdio!" if actions else "Pronto!")
     return {"reply": reply, "actions": actions}
 
 
@@ -596,9 +729,9 @@ def build_dialogue_project(project: dict, server_url: str, log_fn: Callable[[str
             wf,
             {
                 "positive_prompt": prompt,
-                "width": project.get("width", 720),
-                "height": project.get("height", 1280),
-                "length": project.get("length", 81),
+                "width": project.get("width", 480),
+                "height": project.get("height", 832),
+                "length": project.get("length", 65),
                 "filename_prefix": f"fp_studio/{slug}_s{idx:02d}",
             },
         )

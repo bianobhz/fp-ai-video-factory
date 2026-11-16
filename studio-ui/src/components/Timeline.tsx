@@ -123,8 +123,11 @@ export function Timeline() {
             <Music className="w-3.5 h-3.5 text-emerald-400" />
             Música
           </div>
-          <div className="flex-1 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-2 flex items-center text-[11px] text-emerald-300/80">
-            Trilha sonora ambiente (auto-ducking {Math.round(project.musicVolume * 100)}%)
+          <div className="flex-1 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-2 flex items-center justify-between text-[11px] text-emerald-300">
+            <span>
+              Trilha Ativa: <strong>{(project.musicUrl || '/music-bank/upbeat_reels.mp3').split('/').pop()}</strong>
+            </span>
+            <span>Volume: {Math.round(project.musicVolume * 100)}% (Auto-Ducking)</span>
           </div>
         </div>
       </div>

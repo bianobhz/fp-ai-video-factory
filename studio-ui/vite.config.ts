@@ -11,6 +11,7 @@ export default defineConfig({
       '/media': 'http://127.0.0.1:8080',
       '/tmp-media': 'http://127.0.0.1:8080',
       '/uploads': 'http://127.0.0.1:8080',
+      '/music-bank': 'http://127.0.0.1:8080',
     },
   },
 })
