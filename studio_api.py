@@ -28,6 +28,7 @@ OUTPUTS_DIR = REPO_ROOT / "outputs"
 RAW_DIR = OUTPUTS_DIR / "raw"
 FINAL_DIR = OUTPUTS_DIR / "final"
 TMP_DIR = OUTPUTS_DIR / "tmp"
+UPLOADS_DIR = OUTPUTS_DIR / "uploads"
 QUEUE_FILE = TMP_DIR / "queue.json"
 
 
@@ -188,6 +189,334 @@ def call_ai_copilot(user_goal: str, api_key: str, provider: str = "gemini") -> d
 
     cleaned = re.sub(r"^```json\s*|\s*```$", "", raw_text.strip(), flags=re.MULTILINE)
     return json.loads(cleaned)
+
+
+def list_uploads() -> list[dict]:
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    items = []
+    for p in sorted(UPLOADS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower()
+        kind = "image" if ext in (".jpg", ".jpeg", ".png", ".webp") else "audio" if ext in (".mp3", ".wav", ".m4a", ".aac") else "video"
+        items.append({
+            "name": p.name,
+            "url": f"/uploads/{p.name}",
+            "kind": kind,
+            "size_mb": round(p.stat().st_size / (1024 * 1024), 2),
+        })
+    return items
+
+
+def auto_cut_silence(filename: str, log_fn: Callable[[str], None]) -> Path:
+    src = (UPLOADS_DIR / filename).resolve()
+    if not src.is_file():
+        raise FileNotFoundError(f"Arquivo não encontrado: {filename}")
+    log_fn(f"[editor] Detectando silêncios em {filename}...")
+    proc = subprocess.run(
+        ["ffmpeg", "-i", str(src), "-af", "silencedetect=noise=-32dB:d=0.45", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    starts = [float(x) for x in re.findall(r"silence_start: ([0-9.]+)", proc.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([0-9.]+)", proc.stderr)]
+    dur = _ffprobe_duration(src)
+
+    keep_segments: list[tuple[float, float]] = []
+    cursor = 0.0
+    for i, s in enumerate(starts):
+        if s > cursor + 0.15:
+            keep_segments.append((cursor, s))
+        cursor = ends[i] if i < len(ends) else dur
+    if dur > cursor + 0.15:
+        keep_segments.append((cursor, dur))
+
+    out = UPLOADS_DIR / f"cut_{src.stem}_{int(time.time())}.mp4"
+    if not keep_segments or len(keep_segments) == 1 and keep_segments[0][1] - keep_segments[0][0] >= dur - 0.2:
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-c", "copy", str(out)], check=True)
+        return out
+
+    tmp_parts = []
+    for idx, (a, b) in enumerate(keep_segments):
+        part = TMP_DIR / f"cutpart_{idx}_{int(time.time())}.mp4"
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-ss", f"{a:.3f}", "-to", f"{b:.3f}", "-i", str(src),
+             "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-c:a", "aac", str(part)],
+            check=True,
+        )
+        tmp_parts.append(part)
+
+    clist = TMP_DIR / f"cutlist_{int(time.time())}.txt"
+    clist.write_text("\n".join(f"file '{p.as_posix()}'" for p in tmp_parts), encoding="utf-8")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(clist), "-c", "copy", str(out)], check=True)
+    log_fn(f"[editor] Microcortes concluídos: {out.name} ({len(keep_segments)} trechos mantidos)")
+    return out
+
+
+def render_local_project(project: dict, log_fn: Callable[[str], None]) -> Path:
+    fmt = project.get("format", "9:16")
+    w, h = (1080, 1920) if fmt == "9:16" else (1920, 1080) if fmt == "16:9" else (1080, 1080)
+    scenes = project.get("scenes") or []
+    if not scenes:
+        raise ValueError("Nenhuma cena na Timeline para exportar.")
+
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", project.get("title") or f"local_{int(time.time())}").strip("_")
+    work_dir = TMP_DIR / f"render_{slug}_{int(time.time())}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    clips: list[Path] = []
+
+    for idx, sc in enumerate(scenes, start=1):
+        dur = float(sc.get("durationSec") or 3.0)
+        media_url = (sc.get("mediaUrl") or "").strip()
+        speech = (sc.get("speechPtBr") or "").strip()
+        voice = sc.get("voice") or "pt-BR-FranciscaNeural"
+        out_clip = work_dir / f"clip_{idx:02d}.mp4"
+
+        src_file: Path | None = None
+        if media_url.startswith("/uploads/"):
+            src_file = UPLOADS_DIR / media_url.split("/uploads/", 1)[1]
+        elif media_url.startswith("/media/"):
+            src_file = FINAL_DIR / media_url.split("/media/", 1)[1]
+
+        if not src_file or not src_file.is_file():
+            raise FileNotFoundError(f"Cena {idx} ({sc.get('title')}) sem mídia local anexada. Anexe uma foto ou vídeo.")
+
+        audio_in: Path | None = None
+        if speech:
+            audio_in = work_dir / f"tts_{idx:02d}.mp3"
+            synthesize_tts(speech, voice, audio_in)
+            dur = max(dur, _ffprobe_duration(audio_in) + 0.2)
+
+        ext = src_file.suffix.lower()
+        is_image = ext in (".jpg", ".jpeg", ".png", ".webp")
+        frames = int(dur * 30)
+
+        if is_image:
+            log_fn(f"[render] Cena {idx}/{len(scenes)}: foto -> vídeo com zoom suave ({dur:.1f}s)...")
+            vf = (
+                f"scale={w*2}:{h*2}:force_original_aspect_ratio=increase,crop={w*2}:{h*2},"
+                f"zoompan=z='min(zoom+0.0012,1.15)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=30,format=yuv420p"
+            )
+            cmd = ["ffmpeg", "-y", "-v", "error", "-loop", "1", "-t", f"{dur:.2f}", "-i", str(src_file)]
+            if audio_in:
+                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
+            else:
+                cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100", "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18", str(out_clip)]
+            subprocess.run(cmd, check=True)
+        else:
+            log_fn(f"[render] Cena {idx}/{len(scenes)}: ajustando vídeo local...")
+            vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps=30,format=yuv420p"
+            cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(src_file)]
+            if audio_in:
+                cmd += ["-i", str(audio_in), "-vf", vf, "-map", "0:v", "-map", "1:a", "-c:a", "aac", "-shortest"]
+            else:
+                cmd += ["-vf", vf, "-c:a", "aac"]
+            cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "18", str(out_clip)]
+            subprocess.run(cmd, check=True)
+
+        clips.append(out_clip)
+
+    concat_txt = work_dir / "concat.txt"
+    concat_txt.write_text("\n".join(f"file '{c.as_posix()}'" for c in clips), encoding="utf-8")
+    merged = work_dir / "merged.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat_txt), "-c", "copy", str(merged)], check=True)
+
+    FINAL_DIR.mkdir(parents=True, exist_ok=True)
+    final_out = FINAL_DIR / f"{slug}-local-{int(time.time())}.mp4"
+    music_url = (project.get("musicUrl") or "").strip()
+    music_vol = float(project.get("musicVolume") or 0.25)
+
+    if music_url.startswith("/uploads/"):
+        music_file = UPLOADS_DIR / music_url.split("/uploads/", 1)[1]
+        if music_file.is_file():
+            log_fn(f"[render] Mixando trilha sonora ({music_file.name})...")
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-v", "error", "-i", str(merged), "-stream_loop", "-1", "-i", str(music_file),
+                    "-filter_complex", f"[0:a]volume=1.0[a0];[1:a]volume={music_vol:.2f}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    "-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                    str(final_out),
+                ],
+                check=True,
+            )
+            log_fn(f"[render] Vídeo local exportado: {final_out.name}")
+            return final_out
+
+    merged.replace(final_out)
+    log_fn(f"[render] Vídeo local exportado: {final_out.name}")
+    return final_out
+
+
+def call_ai_agent(messages: list[dict], project_state: dict, api_key: str) -> dict:
+    """Conversational AI Agent with full Studio v3 tool-calling (Local CapCut + Vast.ai Cloud)."""
+    uploads = list_uploads()
+    system_msg = {
+        "role": "system",
+        "content": (
+            "Você é o Agente Diretor e Editor do FP AI Video Factory Studio v3. "
+            "Você conversa em português do Brasil com o operador e TEM CONTROLE TOTAL da interface (Editor Local estilo CapCut + Estúdio IA Vast.ai). "
+            f"Arquivos locais anexados em outputs/uploads/: {json.dumps(uploads, ensure_ascii=False)}\n"
+            f"Estado atual do projeto:\n{json.dumps(project_state, ensure_ascii=False)}\n\n"
+            "Use as ferramentas para criar cenas IA, montar Reels com fotos/vídeos locais anexados, colocar música de fundo, "
+            "fazer microcortes de silêncio, editar cenas, exportar localmente via FFmpeg ou abrir a produção na Vast.ai."
+        ),
+    }
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "replace_scenes",
+                "description": "Cria um novo roteiro substituindo todas as cenas do projeto.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "scenes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "speaker": {"type": "string"},
+                                    "voice": {"type": "string", "enum": ["pt-BR-FranciscaNeural", "pt-BR-AntonioNeural", "pt-BR-ThalitaNeural"]},
+                                    "speech_ptbr": {"type": "string"},
+                                    "visual_prompt_en": {"type": "string"},
+                                    "durationSec": {"type": "number"},
+                                },
+                                "required": ["speaker", "voice", "speech_ptbr", "visual_prompt_en"],
+                            },
+                        },
+                    },
+                    "required": ["title", "scenes"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "update_scene",
+                "description": "Edita propriedades de uma cena existente pelo número (1, 2, 3...) ou id.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "scene_index": {"type": "integer", "description": "Número da cena começando em 1"},
+                        "speechPtBr": {"type": "string"},
+                        "visualPromptEn": {"type": "string"},
+                        "voice": {"type": "string"},
+                        "durationSec": {"type": "number"},
+                        "lipSyncEnabled": {"type": "boolean"},
+                    },
+                    "required": ["scene_index"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_project_settings",
+                "description": "Altera configurações globais do projeto (título, formato, legendas).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "format": {"type": "string", "enum": ["9:16", "16:9", "1:1"]},
+                        "subtitlesEnabled": {"type": "boolean"},
+                    },
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "save_to_queue",
+                "description": "Salva o projeto atual na fila de produção offline.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "open_produce_modal",
+                "description": "Abre o Modal de Autorização da Vast.ai mostrando a GPU mais barata e o preço para o usuário autorizar.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_local_media_scenes",
+                "description": "Monta cenas na Timeline usando fotos ou vídeos já anexados em outputs/uploads/ (ex: Reels de fotos).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "filenames": {"type": "array", "items": {"type": "string"}},
+                        "durationSec": {"type": "number", "description": "Duração de cada foto/cena em segundos (ex: 2.5)"},
+                        "replace": {"type": "boolean", "description": "Se true, substitui a timeline atual"},
+                    },
+                    "required": ["filenames"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "set_music",
+                "description": "Define uma música de fundo anexada em outputs/uploads/ na faixa Música da Timeline.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "volume": {"type": "number", "description": "Volume de 0.0 a 1.0 (ex: 0.25)"},
+                    },
+                    "required": ["filename"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "auto_cut_video",
+                "description": "Executa microcortes automáticos via FFmpeg removendo silêncios de um vídeo narrado anexado.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"filename": {"type": "string"}},
+                    "required": ["filename"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "render_local_video",
+                "description": "Exporta/renderiza o projeto atual localmente usando FFmpeg (custo zero de nuvem).",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+    ]
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [system_msg, *messages],
+        "tools": tools,
+        "tool_choice": "auto",
+    }
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=45) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+
+    msg = data["choices"][0]["message"]
+    actions = []
+    for tc in msg.get("tool_calls") or []:
+        fn = tc["function"]["name"]
+        args = json.loads(tc["function"].get("arguments") or "{}")
+        actions.append({"name": fn, "args": args})
+
+    reply = msg.get("content") or ("Ação executada na interface!" if actions else "Pronto!")
+    return {"reply": reply, "actions": actions}
 
 
 def load_queue() -> list[dict]:

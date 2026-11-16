@@ -71,13 +71,19 @@ export function PreviewStage({ previewVideoUrl, onClearPreviewVideo }: PreviewSt
               </div>
             )}
 
-            <div className="px-6 text-center">
-              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
-                {activeScene.speaker.slice(0, 2).toUpperCase()}
+            {activeScene.mediaUrl && activeScene.mediaType === 'image' ? (
+              <img src={activeScene.mediaUrl} alt={activeScene.title} className="w-full h-full object-cover" />
+            ) : activeScene.mediaUrl && activeScene.mediaType === 'video' ? (
+              <video key={activeScene.mediaUrl} src={activeScene.mediaUrl} controls className="w-full h-full object-cover bg-black" />
+            ) : (
+              <div className="px-6 text-center">
+                <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
+                  {activeScene.speaker.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="text-xs font-semibold text-slate-200 mb-1">{activeScene.speaker}</div>
+                <p className="text-[11px] text-slate-400 line-clamp-4">{activeScene.visualPromptEn}</p>
               </div>
-              <div className="text-xs font-semibold text-slate-200 mb-1">{activeScene.speaker}</div>
-              <p className="text-[11px] text-slate-400 line-clamp-4">{activeScene.visualPromptEn}</p>
-            </div>
+            )}
 
             {project.subtitlesEnabled && activeScene.subtitleText && (
               <div className="absolute bottom-8 left-4 right-4 text-center">

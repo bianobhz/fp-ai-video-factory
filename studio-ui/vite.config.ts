@@ -10,6 +10,7 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8080',
       '/media': 'http://127.0.0.1:8080',
       '/tmp-media': 'http://127.0.0.1:8080',
+      '/uploads': 'http://127.0.0.1:8080',
     },
   },
 })

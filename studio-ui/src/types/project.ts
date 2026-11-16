@@ -12,6 +12,8 @@ export interface SceneItem {
   transition: TransitionType;
   volume: number; // 0..1
   subtitleText: string;
+  mediaType?: 'ai' | 'image' | 'video';
+  mediaUrl?: string;
   videoUrl?: string;
   audioUrl?: string;
   lipSyncEnabled: boolean;

@@ -1,15 +1,16 @@
-import { Cloud, Cpu, Film, Layers, Plus, Sparkles } from 'lucide-react';
+import { Cloud, Cpu, Download, Film, Layers, Plus, Sparkles } from 'lucide-react';
 import { useProjectStore } from '../store/useProjectStore';
 import type { AspectFormat } from '../types/project';
 
 interface TopBarProps {
   onEnqueue: () => void;
   onRunQueue: () => void;
+  onLocalRender: () => void;
   gpuLabel: string;
   jobStatus: string;
 }
 
-export function TopBar({ onEnqueue, onRunQueue, gpuLabel, jobStatus }: TopBarProps) {
+export function TopBar({ onEnqueue, onRunQueue, onLocalRender, gpuLabel, jobStatus }: TopBarProps) {
   const { project, setProjectTitle, setFormat, addScene } = useProjectStore();
   const totalDur = project.scenes.reduce((acc, s) => acc + s.durationSec, 0);
 
@@ -73,11 +74,19 @@ export function TopBar({ onEnqueue, onRunQueue, gpuLabel, jobStatus }: TopBarPro
           Salvar na Fila
         </button>
         <button
+          onClick={onLocalRender}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white cursor-pointer"
+          title="Renderizar localmente via FFmpeg (custo zero de nuvem)"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Exportar Local
+        </button>
+        <button
           onClick={onRunQueue}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 hover:opacity-90 text-xs font-semibold text-white shadow-lg shadow-blue-600/20 cursor-pointer"
         >
           <Cloud className="w-3.5 h-3.5" />
-          <span>Produzir / Renderizar</span>
+          <span>Produzir Nuvem</span>
           <Sparkles className="w-3 h-3" />
         </button>
       </div>

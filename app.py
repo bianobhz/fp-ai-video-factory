@@ -24,9 +24,25 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 import studio_api
+import vast_manager
 
 REPO_ROOT = Path(__file__).resolve().parent
 WEB_DIR = REPO_ROOT / "web"
+
+
+def _load_dotenv() -> None:
+    env_file = REPO_ROOT / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip())
+
+
+_load_dotenv()
 WORKFLOWS_DIR = REPO_ROOT / "workflows"
 OUTPUTS_DIR = REPO_ROOT / "outputs"
 FINAL_DIR = OUTPUTS_DIR / "final"
@@ -194,6 +210,45 @@ def run_queue_thread(server_url: str) -> None:
         JOBS.append_log(f"[fila] ERRO: {exc}")
 
 
+def run_local_render_thread(project: dict) -> None:
+    try:
+        out_path = studio_api.render_local_project(project, JOBS.append_log)
+        with JOBS.lock:
+            JOBS.status = "done"
+            JOBS.last_video = f"/media/{out_path.name}"
+        JOBS.append_log(f"[render] Pronto: {out_path.name}")
+    except Exception as exc:
+        with JOBS.lock:
+            JOBS.status = "error"
+            JOBS.error_message = str(exc)
+        JOBS.append_log(f"[render] ERRO: {exc}")
+
+
+def run_vast_produce_thread(offer_id: int) -> None:
+    vkey = os.environ.get("VAST_API_KEY", "").strip()
+    rclone_b64 = os.environ.get("RCLONE_CONF_BASE64", "").strip()
+    instance_id: int | None = None
+    try:
+        if not vkey or not rclone_b64:
+            raise ValueError("VAST_API_KEY ou RCLONE_CONF_BASE64 ausente no .env")
+        JOBS.append_log(f"[vast] Subindo instância na oferta {offer_id} (disco 50 GB)...")
+        instance_id = vast_manager.launch_instance(vkey, offer_id, rclone_b64, disk_gb=50)
+        JOBS.append_log(f"[vast] Instância {instance_id} criada. Aguardando ComfyUI ficar online...")
+        comfy_url = vast_manager.wait_for_comfyui(vkey, instance_id, JOBS.append_log)
+        run_queue_thread(comfy_url)
+    except Exception as exc:
+        with JOBS.lock:
+            JOBS.status = "error"
+            JOBS.error_message = str(exc)
+        JOBS.append_log(f"[vast] ERRO: {exc}")
+    finally:
+        if instance_id is not None and vkey:
+            try:
+                vast_manager.destroy_instance(vkey, instance_id, JOBS.append_log)
+            except Exception as dexc:
+                JOBS.append_log(f"[vast] AVISO ao destruir instância {instance_id}: {dexc}")
+
+
 def run_pull_drive_thread() -> None:
     try:
         raw_dir = OUTPUTS_DIR / "raw"
@@ -288,6 +343,47 @@ class AdminHandler(BaseHTTPRequestHandler):
 
         if path == "/api/queue":
             self.send_json({"items": studio_api.load_queue()})
+            return
+
+        if path == "/api/uploads":
+            self.send_json({"items": studio_api.list_uploads()})
+            return
+
+        if path.startswith("/uploads/"):
+            filename = unquote(path[len("/uploads/"):])
+            file_path = (studio_api.UPLOADS_DIR / filename).resolve()
+            if file_path.parent != studio_api.UPLOADS_DIR.resolve() or not file_path.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND, "Upload not found")
+                return
+            mime, _ = mimetypes.guess_type(str(file_path))
+            size = file_path.stat().st_size
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", mime or "application/octet-stream")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            with open(file_path, "rb") as f:
+                while chunk := f.read(1024 * 512):
+                    self.wfile.write(chunk)
+            return
+
+        if path == "/api/vast/quote":
+            vkey = os.environ.get("VAST_API_KEY", "").strip()
+            if not vkey:
+                self.send_json({"ok": False, "error": "VAST_API_KEY não configurada no .env"}, status=400)
+                return
+            try:
+                offer = vast_manager.find_cheapest_gpu(vkey)
+                self.send_json({
+                    "ok": True,
+                    "offer_id": offer.get("id"),
+                    "gpu_name": offer.get("gpu_name"),
+                    "vram_gb": round(offer.get("gpu_ram", 0) / 1024, 1),
+                    "dph_total": round(offer.get("dph_total", 0), 3),
+                    "disk_gb": 50,
+                })
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc)}, status=500)
             return
 
         if path == "/api/comfy-queue":
@@ -412,6 +508,21 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": str(exc)}, status=500)
             return
 
+        if path == "/api/ai-agent":
+            body = self.read_json()
+            messages = body.get("messages") or []
+            project_state = body.get("project") or {}
+            api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+            if not api_key:
+                self.send_json({"ok": False, "error": "OPENAI_API_KEY não configurada no .env"}, status=400)
+                return
+            try:
+                res = studio_api.call_ai_agent(messages, project_state, api_key)
+                self.send_json({"ok": True, **res})
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
         if path == "/api/ai-copilot":
             body = self.read_json()
             goal = (body.get("goal") or "").strip()
@@ -459,6 +570,66 @@ class AdminHandler(BaseHTTPRequestHandler):
                 JOBS.error_message = None
                 JOBS.started_at = time.time()
             t = threading.Thread(target=run_queue_thread, args=(server,), daemon=True)
+            t.start()
+            self.send_json({"ok": True})
+            return
+
+        if path == "/api/upload":
+            import base64
+            body = self.read_json()
+            fname = Path(body.get("filename") or f"file_{int(time.time())}").name
+            b64 = body.get("data_base64") or ""
+            if "," in b64:
+                b64 = b64.split(",", 1)[1]
+            if not b64:
+                self.send_json({"ok": False, "error": "Arquivo vazio."}, status=400)
+                return
+            studio_api.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            dest = studio_api.UPLOADS_DIR / fname
+            dest.write_bytes(base64.b64decode(b64))
+            self.send_json({"ok": True, "item": {"name": fname, "url": f"/uploads/{fname}"}})
+            return
+
+        if path == "/api/local/auto-cut":
+            body = self.read_json()
+            fname = body.get("filename") or ""
+            try:
+                out = studio_api.auto_cut_silence(fname, JOBS.append_log)
+                self.send_json({"ok": True, "filename": out.name, "url": f"/uploads/{out.name}"})
+            except Exception as exc:
+                self.send_json({"ok": False, "error": str(exc)}, status=500)
+            return
+
+        if path == "/api/local/render":
+            body = self.read_json()
+            with JOBS.lock:
+                if JOBS.status == "running":
+                    self.send_json({"ok": False, "error": "Já existe um job em execução."}, status=409)
+                    return
+                JOBS.status = "running"
+                JOBS.logs = ["[render] Iniciando renderização local via FFmpeg..."]
+                JOBS.error_message = None
+                JOBS.started_at = time.time()
+            t = threading.Thread(target=run_local_render_thread, args=(body,), daemon=True)
+            t.start()
+            self.send_json({"ok": True})
+            return
+
+        if path == "/api/vast/produce":
+            body = self.read_json()
+            offer_id = body.get("offer_id")
+            if not offer_id:
+                self.send_json({"ok": False, "error": "offer_id é obrigatório."}, status=400)
+                return
+            with JOBS.lock:
+                if JOBS.status == "running":
+                    self.send_json({"ok": False, "error": "Já existe um job em execução."}, status=409)
+                    return
+                JOBS.status = "running"
+                JOBS.logs = ["[vast] Autorizado pelo operador. Iniciando produção na nuvem..."]
+                JOBS.error_message = None
+                JOBS.started_at = time.time()
+            t = threading.Thread(target=run_vast_produce_thread, args=(int(offer_id),), daemon=True)
             t.start()
             self.send_json({"ok": True})
             return

@@ -10,6 +10,7 @@ interface ProjectState {
   setFormat: (format: AspectFormat) => void;
   setWorkflow: (workflow: string) => void;
   setSubtitlesEnabled: (enabled: boolean) => void;
+  setMusicUrl: (url: string | undefined) => void;
   setMusicVolume: (volume: number) => void;
   selectScene: (id: string | null) => void;
   addScene: (partial?: Partial<SceneItem>) => void;
@@ -89,6 +90,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
   setFormat: (format) => set((s) => ({ project: { ...s.project, format } })),
   setWorkflow: (workflow) => set((s) => ({ project: { ...s.project, workflow } })),
   setSubtitlesEnabled: (subtitlesEnabled) => set((s) => ({ project: { ...s.project, subtitlesEnabled } })),
+  setMusicUrl: (musicUrl) => set((s) => ({ project: { ...s.project, musicUrl } })),
   setMusicVolume: (musicVolume) => set((s) => ({ project: { ...s.project, musicVolume } })),
   selectScene: (selectedSceneId) => set({ selectedSceneId }),
 

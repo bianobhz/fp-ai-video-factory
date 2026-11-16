@@ -57,7 +57,7 @@ def launch_instance(
     offer_id: int,
     rclone_conf_base64: str,
     image: str = DEFAULT_IMAGE,
-    disk_gb: int = 60,
+    disk_gb: int = 50,
 ) -> int:
     payload = {
         "client_id": "me",
